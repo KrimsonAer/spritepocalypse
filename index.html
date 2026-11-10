@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Spritepocalypse</title>
+  <meta name="description" content="A tower defence where any of 1.4 million pixel sprites can be your tower. Type a word, get a tower.">
+  <meta name="theme-color" content="#1e293b">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- The board, with the score bar sitting across its top edge -->
+    <main id="stage">
+      <div id="boardwrap">
+        <header id="hud">
+          <div class="stat" id="stat-hearts" title="Hearts">
+            <svg class="ico" viewBox="0 0 7 6" shape-rendering="crispEdges" aria-hidden="true"><g fill="#f43f5e"><rect x="1" y="0" width="2" height="1"/><rect x="4" y="0" width="2" height="1"/><rect x="0" y="1" width="7" height="2"/><rect x="1" y="3" width="5" height="1"/><rect x="2" y="4" width="3" height="1"/><rect x="3" y="5" width="1" height="1"/></g><rect x="1" y="1" width="1" height="1" fill="#fecdd3"/></svg>
+            <b id="hud-hearts">10</b>
+          </div>
+          <div class="stat" id="stat-gold" title="Gold">
+            <svg class="ico" viewBox="0 0 6 6" shape-rendering="crispEdges" aria-hidden="true"><g fill="#facc15"><rect x="1" y="0" width="4" height="1"/><rect x="0" y="1" width="6" height="4"/><rect x="1" y="5" width="4" height="1"/></g><rect x="2" y="1" width="2" height="4" fill="#ca8a04"/><rect x="1" y="1" width="1" height="1" fill="#fef9c3"/></svg>
+            <b id="hud-gold">0</b>
+          </div>
+          <div class="stat" id="stat-wave"><span class="lbl">WAVE</span><b id="hud-wave">1</b></div>
+          <div class="stat" id="stat-score"><span class="lbl">SCORE</span><b id="hud-score">0</b></div>
+        </header>
+        <canvas id="board"></canvas>
+      </div>
+    </main>
+
+    <!-- Build panel: search box, the sprite you found or the thing you tapped, wave controls -->
+    <aside id="panel">
+      <form id="search-form" autocomplete="off">
+        <input id="search" type="text" inputmode="text" enterkeyhint="go" placeholder="Type anything: wizard hat, cat..." autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40">
+        <button type="submit" class="px-btn">SPAWN</button>
+      </form>
+      <div id="msg" role="status"></div>
+
+      <!-- Always takes up the same space, so the board never jumps when a sprite appears -->
+      <div id="card" class="card empty">
+        <div class="card-empty">Type a word and press SPAWN to find a tower. Tap a tower or an enemy on the board to inspect it.</div>
+        <canvas id="card-sprite" class="sprite" width="16" height="16"></canvas>
+        <div class="card-body">
+          <div id="card-name" class="card-name"></div>
+          <div id="card-tags" class="tags"></div>
+          <div id="card-note" class="card-note"></div>
+        </div>
+        <div id="card-actions" class="card-actions"></div>
+      </div>
+
+      <div id="controls">
+        <button type="button" class="px-btn big" id="btn-start">START WAVE 1</button>
+        <div class="speed" role="group" aria-label="Game speed">
+          <button type="button" class="px-btn" data-speed="1">1x</button>
+          <button type="button" class="px-btn" data-speed="2">2x</button>
+          <button type="button" class="px-btn" data-speed="3">3x</button>
+        </div>
+        <button type="button" class="px-btn" id="btn-pause" aria-label="Pause">II</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Description bubble for a tag (hover with a mouse, tap on a touch screen) -->
+  <div id="tip" class="tip hidden" role="tooltip"></div>
+
+  <!-- Main menu -->
+  <div id="menu" class="overlay">
+    <div class="sheet">
+      <div class="deco" data-deco="8"></div>
+      <h1 class="title main">SPRITEPOCALYPSE</h1>
+      <div id="menu-loading" class="loading">Loading sprite index...</div>
+      <div class="menu-buttons">
+        <button type="button" class="px-btn big" id="btn-new" disabled>NEW RUN</button>
+        <button type="button" class="px-btn" data-toggle="how">HOW TO PLAY</button>
+        <button type="button" class="px-btn" data-sound>SOUND: ON</button>
+      </div>
+      <div class="how hidden" data-how></div>
+      <div class="deco" data-deco="8"></div>
+    </div>
+  </div>
+
+  <!-- Pause menu -->
+  <div id="pause" class="overlay hidden">
+    <div class="sheet">
+      <div class="deco" data-deco="6"></div>
+      <h2 class="title small">PAUSED</h2>
+      <div class="menu-buttons">
+        <button type="button" class="px-btn big" id="btn-resume">RESUME</button>
+        <button type="button" class="px-btn" id="btn-restart">NEW RUN</button>
+        <button type="button" class="px-btn" data-toggle="how">HOW TO PLAY</button>
+        <button type="button" class="px-btn" data-sound>SOUND: ON</button>
+      </div>
+      <div class="how hidden" data-how></div>
+    </div>
+  </div>
+
+  <!-- Game over -->
+  <div id="over" class="overlay hidden">
+    <div class="sheet">
+      <div class="deco" data-deco="6"></div>
+      <h2 class="title small">OVERRUN</h2>
+      <p class="tagline" id="over-stats"></p>
+      <div class="menu-buttons">
+        <button type="button" class="px-btn big" id="btn-again">NEW RUN</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

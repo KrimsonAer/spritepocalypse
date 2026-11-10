@@ -1,0 +1,273 @@
+/* =====================================================================================
+   SPRITEPOCALYPSE - styles
+   Pixel-art UI: hard edges, chunky borders, stepped shadows, one pixel font.
+   Layout: phones stack board / panel. Wide screens put the panel beside the board.
+   Sizes are in em so the whole UI grows with the screen: the base size is set on <body>,
+   and the score bar is sized by ui.js to match the board.
+   ===================================================================================== */
+
+:root {
+  --ink: #1e293b;        /* dark outline colour */
+  --desk: #334155;       /* page background */
+  --panel: #f8fafc;      /* panel background */
+  --accent: #f59e0b;     /* primary button */
+  --blue: #2563eb;
+  --px: 3px;             /* border thickness, the "pixel" size of the UI */
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; height: 100%;
+  background: var(--desk);
+  color: var(--ink);
+  font-family: "Pixelify Sans", "Courier New", monospace;
+  /* base text size: 16px on a phone, up to 24px on a large monitor */
+  font-size: clamp(16px, calc(0.6vw + 0.9vh + 6px), 24px);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Keep every sprite crisp. */
+canvas, .sprite { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+#app {
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "stage" "panel";
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* ---------------------------------------------------------------- board and score bar */
+#stage {
+  grid-area: stage;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 0; min-width: 0;
+  padding: 6px;
+  overflow: hidden;
+}
+#boardwrap {
+  display: flex; flex-direction: column;
+  border: var(--px) solid var(--ink);
+  box-shadow: 4px 4px 0 rgba(15, 23, 42, 0.5);
+}
+#board {
+  display: block;
+  touch-action: none;       /* taps and drags go to the game, not to page scrolling */
+  cursor: pointer;
+  background: #fbfdff;
+}
+
+/* Score bar: same width as the board. ui.js sets its height and font-size from the board size. */
+#hud {
+  display: flex; align-items: stretch; justify-content: space-between;
+  gap: 0.16em; padding: 0.14em 0.16em;
+  background: var(--ink); color: #fff;
+  border-bottom: var(--px) solid #0f172a;
+}
+.stat {
+  position: relative;
+  flex: 1 1 0; min-width: 0;
+  display: flex; align-items: center; justify-content: center; gap: 0.2em;
+  background: #0f172a;
+  border: 2px solid #475569;
+  white-space: nowrap;
+  line-height: 1;
+}
+#stat-hearts, #stat-wave { flex: 0.8 1 0; }
+#stat-score { flex: 1.25 1 0; }
+.stat b { font-weight: 700; font-size: 1em; display: inline-block; }
+.stat .lbl { font-size: 0.3em; color: #94a3b8; letter-spacing: 0.1em; }
+/* wave and score: small label stacked above the number */
+#stat-wave, #stat-score { flex-direction: column; gap: 0.04em; }
+#stat-wave b, #stat-score b { font-size: 0.78em; }
+.stat .ico { width: 0.8em; height: 0.72em; flex: none; }
+#stat-hearts b { color: #fda4af; }
+#stat-gold b { color: #fde047; }
+#stat-wave b { color: #7dd3fc; }
+
+/* number pops when it goes up, shakes red when hearts are lost */
+.stat.pop b { animation: stat-pop 0.32s steps(6); }
+.stat.pop { animation: stat-glow 0.32s steps(4); }
+.stat.hurt { animation: stat-shake 0.4s steps(8); }
+@keyframes stat-pop { 0% { transform: scale(1); } 35% { transform: scale(1.45); } 100% { transform: scale(1); } }
+@keyframes stat-glow { 0% { border-color: #fff; background: #334155; } 100% { border-color: #475569; background: #0f172a; } }
+@keyframes stat-shake {
+  0%, 100% { transform: translateX(0); background: #0f172a; }
+  20% { transform: translateX(-12%); background: #7f1d1d; }
+  40% { transform: translateX(10%); background: #7f1d1d; }
+  60% { transform: translateX(-7%); }
+  80% { transform: translateX(4%); }
+}
+/* little "+25" that floats down out of a stat onto the board */
+.chip {
+  position: absolute; left: 50%; top: 0;
+  font-size: 0.6em; font-weight: 700; color: #fde047;
+  text-shadow: 2px 2px 0 #0f172a, -1px -1px 0 #0f172a, 1px -1px 0 #0f172a, -1px 1px 0 #0f172a;
+  pointer-events: none; z-index: 5;
+  animation: chip-rise 0.9s steps(12) forwards;
+}
+.chip.minus { color: #fca5a5; }
+@keyframes chip-rise { 0% { transform: translate(-50%, 60%) scale(0.6); opacity: 0; } 15% { transform: translate(-50%, 110%) scale(1.25); opacity: 1; } 100% { transform: translate(-50%, 230%); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .stat.pop, .stat.pop b, .stat.hurt, .chip { animation-duration: 0.01s; } }
+
+/* ---------------------------------------------------------------- build panel */
+#panel {
+  grid-area: panel;
+  display: flex; flex-direction: column; gap: 0.4em;
+  padding: 0.5em;
+  background: var(--panel);
+  border-top: var(--px) solid var(--ink);
+}
+#search-form { display: flex; gap: 0.4em; }
+#search {
+  flex: 1; min-width: 0;
+  font: inherit; font-size: 1.15em;
+  padding: 0.4em 0.55em;
+  border: var(--px) solid var(--ink); border-radius: 0;
+  background: #fff; color: var(--ink);
+  outline: none;
+}
+#search:focus { border-color: var(--blue); }
+#msg { min-height: 1.2em; font-size: 0.85em; color: #475569; }
+#msg.bad { color: #dc2626; }
+
+.px-btn {
+  font: inherit; font-weight: 700; font-size: 1em; letter-spacing: 0.06em;
+  padding: 0.5em 0.75em;
+  color: var(--ink); background: #e2e8f0;
+  border: var(--px) solid var(--ink); border-radius: 0;
+  box-shadow: inset -3px -3px 0 rgba(15, 23, 42, 0.22), inset 3px 3px 0 rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.px-btn:active:not(:disabled), .px-btn.on {
+  box-shadow: inset 3px 3px 0 rgba(15, 23, 42, 0.25);
+  transform: translateY(1px);
+}
+.px-btn.on { background: var(--accent); }
+.px-btn:disabled { opacity: 0.5; cursor: default; }
+.px-btn.small { font-size: 0.8em; padding: 0.4em 0.55em; }
+.px-btn.big { font-size: 1.25em; padding: 0.5em 0.6em; background: var(--accent); width: 100%; }
+.px-btn.danger { background: #fca5a5; }
+
+/* Start button with speed and pause beside it. */
+#controls { display: flex; gap: 0.35em; align-items: stretch; }
+#controls #btn-start { flex: 1; min-width: 0; width: auto; white-space: nowrap; }
+#controls .speed { display: flex; }
+#controls .speed .px-btn { padding: 0.5em 0.5em; margin-left: calc(var(--px) * -1); }
+#controls .speed .px-btn:first-child { margin-left: 0; }
+#controls #btn-pause { padding: 0.5em 0.65em; }
+
+/* The sprite you found, or the tower or enemy you tapped. */
+.card {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.5em; align-items: center;
+  padding: 0.4em;
+  min-height: 6.4em;         /* fixed footprint: the board must not resize when the card fills in */
+  border: var(--px) solid var(--ink);
+  background: #fff;
+}
+.card.empty > *:not(.card-empty) { display: none; }
+.card:not(.empty) > .card-empty { display: none; }
+.card.enemy { background: #fff1f2; }
+.card-empty { grid-column: 1 / -1; font-size: 0.85em; color: #64748b; text-align: center; }
+.card .sprite {
+  width: 4em; height: 4em;
+  background: #fbfdff; border: 2px solid #cbd5e1;
+  touch-action: none; cursor: grab;
+}
+.card-name { font-weight: 700; font-size: 1.15em; line-height: 1.1; overflow-wrap: anywhere; }
+.card-note { font-size: 0.8em; color: #475569; margin-top: 0.25em; }
+.card-actions { display: flex; flex-direction: column; gap: 0.25em; }
+.tags { display: flex; flex-wrap: wrap; gap: 0.25em; margin-top: 0.3em; }
+.tag {
+  font-size: 0.85em; font-weight: 700; padding: 0.05em 0.4em;
+  color: #fff; background: var(--c, #475569);
+  border: 2px solid var(--ink);
+}
+.tag.light { color: var(--ink); }
+.tag.explains { cursor: help; border-style: dashed; }      /* this tag will describe itself */
+
+/* Tag description bubble. Positioned by ui.js next to the tag. */
+.tip {
+  position: fixed; z-index: 20;
+  max-width: min(18em, calc(100vw - 16px));
+  padding: 0.4em 0.55em;
+  font-size: 0.85em; line-height: 1.25;
+  color: #fff; background: var(--ink);
+  border: 2px solid #fff;
+  box-shadow: 3px 3px 0 rgba(15, 23, 42, 0.5);
+  pointer-events: none;
+}
+
+.hidden { display: none !important; }
+
+/* ---------------------------------------------------------------- menus */
+.overlay {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.82);
+  overflow-y: auto;
+}
+.sheet {
+  width: min(27em, 100%);
+  max-height: 100%; overflow-y: auto;
+  padding: 1.1em 1em;
+  text-align: center;
+  background-color: #fbfdff;
+  /* graph paper, same as the board */
+  background-image: linear-gradient(#d6e6f7 1px, transparent 1px), linear-gradient(90deg, #d6e6f7 1px, transparent 1px);
+  background-size: 12px 12px;
+  border: var(--px) solid var(--ink);
+  box-shadow: 6px 6px 0 rgba(15, 23, 42, 0.6);
+}
+.title {
+  margin: 0.25em 0 0.1em;
+  font-size: clamp(28px, 9vw, 2.75em); font-weight: 700; line-height: 1; letter-spacing: 2px;
+  color: var(--accent);
+  text-shadow: 3px 3px 0 var(--ink), -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink);
+}
+.title.small { font-size: 2em; }
+/* the game name: always one line, sized to fit the sheet on any screen */
+.title.main { font-size: min(2.3em, calc((100vw - 80px) / 10.5)); white-space: nowrap; margin-bottom: 0.45em; }
+.tagline { margin: 0.5em 0 0.75em; font-size: 1em; color: #334155; text-wrap: balance; }
+.loading { font-size: 0.85em; color: #64748b; margin-bottom: 0.5em; }
+.menu-buttons { display: flex; flex-direction: column; gap: 0.5em; align-items: stretch; margin: 0.4em auto; max-width: 17.5em; }
+.deco { display: flex; justify-content: center; gap: 0.4em; min-height: 2.5em; flex-wrap: wrap; }
+.deco canvas { width: 2.5em; height: 2.5em; animation: bob 1.6s steps(2) infinite; }
+.deco canvas:nth-child(2n) { animation-delay: -0.8s; }
+@keyframes bob { 50% { transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) { .deco canvas { animation: none; } }
+.how {
+  text-align: left; font-size: 0.85em; line-height: 1.35; color: #1e293b;
+  margin: 0.6em 0.1em 0.25em; padding: 0.5em 0.6em;
+  background: #fff; border: 2px solid var(--ink);
+}
+.how p { margin: 0 0 0.4em; }
+.how p:last-child { margin-bottom: 0; }
+
+/* ---------------------------------------------------------------- wide screens: panel beside the board */
+@media (min-width: 760px) and (min-aspect-ratio: 1/1) {
+  #app {
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) clamp(340px, 32vw, 520px);
+    grid-template-areas: "stage panel";
+  }
+  #panel { border-top: none; border-left: var(--px) solid var(--ink); padding: 0.75em; gap: 0.6em; }
+  .card { grid-template-columns: auto minmax(0, 1fr); min-height: 9em; align-content: center; }
+  .card-actions { grid-column: 1 / -1; flex-direction: row; }
+  .card-actions .px-btn { flex: 1; }
+  #controls { margin-top: auto; flex-wrap: wrap; }
+  #controls #btn-start { flex: 1 1 100%; }
+  #controls .speed { flex: 1; }
+  #controls .speed .px-btn { flex: 1; }
+}
+
+/* ---------------------------------------------------------------- small phones */
+@media (max-width: 420px) {
+  .px-btn.big { font-size: 1.1em; }
+  #controls .speed .px-btn { padding: 0.5em 0.4em; }
+}
