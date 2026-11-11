@@ -42,6 +42,7 @@ const HOW_TO_PLAY = [
   "Your first 5 towers are free. After that towers cost gold, which you earn from kills.",
   "Until you press START WAVE you can move or remove new towers for free. After that they are locked and sell for half.",
   "Tap a locked tower or an enemy to see its tags. Hover or tap a tag to read what it does.",
+  "On a PC, right click to deselect.",
   "Your layout is rated when you start a wave. The further it is from the obvious zigzag, the bigger the layout bonus every wave.",
   "Flying enemies skip the maze. Only some towers can hit them. Every few waves ends with a boss.",
 ];
@@ -125,7 +126,15 @@ export function initUI() {
   canvas.addEventListener("pointerup", onBoardUp);
   canvas.addEventListener("pointercancel", () => { press = null; view.ghost = null; });
   canvas.addEventListener("pointerleave", () => { if (!press) view.hover = null; });
-  canvas.addEventListener("contextmenu", (ev) => ev.preventDefault());
+  // Right click (PC): let go of whatever is selected. A selected sprite first, then a selected
+  // tower, an inspected enemy or a pending move. Works on the board and on the side panel.
+  const deselect = (ev) => {
+    ev.preventDefault();
+    if (armed) { setArmed(false); sfx.click(); }
+    else if (moveMode || view.selected || view.selectedEnemy) { clearSelection(); setMsg(""); sfx.click(); }
+  };
+  canvas.addEventListener("contextmenu", deselect);
+  $("panel").addEventListener("contextmenu", (ev) => { if (!ev.target.closest("input")) deselect(ev); });
 
   // dragging the sprite card onto the board
   const sprite = $("card-sprite");
@@ -401,6 +410,7 @@ function enemyAt(clientX, clientY) {
 
 function onBoardDown(ev) {
   unlockAudio();
+  if (ev.pointerType === "mouse" && ev.button !== 0) return;   // only the left button builds and places
   const cell = cellAt(ev.clientX, ev.clientY);
   if (!cell) return;
   try { ev.currentTarget.setPointerCapture(ev.pointerId); } catch (err) { /* synthetic or lost pointer: carry on without capture */ }
@@ -513,6 +523,8 @@ function tapCell(cell) {
 // ------------------------------------------------------------------------------------
 
 let shown = {};
+// Only mention right click on devices with a mouse.
+const RIGHT_CLICK_HINT = window.matchMedia && matchMedia("(pointer: fine)").matches ? " <b>RIGHT CLICK</b> to deselect." : "";
 function setText(id, value) {
   if (shown[id] === value) return;
   shown[id] = value;
@@ -632,7 +644,7 @@ export function refreshUI() {
   // controls reminder under the board
   const hint = state.phase === "wave"
     ? "<b>TAP</b> a tower or an enemy to see its tags. Towers can still be bought."
-    : "<b>TAP</b> or <b>DRAG</b> to draw blocks. Start on a block to erase. <b>TYPE</b> a word, <b>SELECT</b> the sprite, tap a block.";
+    : "<b>TAP</b> or <b>DRAG</b> to draw blocks. Start on a block to erase. <b>TYPE</b> a word, <b>SELECT</b> the sprite, tap a block." + RIGHT_CLICK_HINT;
   if (shown.hint !== hint) { shown.hint = hint; $("hint").innerHTML = "<span>" + hint + "</span>"; fitHint(); }
 
   // incoming enemy group: covers the score bar for a few seconds
