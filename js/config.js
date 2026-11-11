@@ -163,7 +163,8 @@ export const CONFIG = {
     Dark: { curse: 1.25, time: 3 },                           // curse: enemy takes more damage
     Water: { knockback: 0.3 },                                // splash: small push back
     Nature: { root: 0.5, cooldown: 3 },                       // root: brief hold, then immune for a while
-    // Magic and Sonic ignore Armored. Sonic and Anti-Air can hit Flying. Holy ignores Shielded and Stealth.
+    // Armored only halves Physical damage; every other element ignores it. Sonic and Anti-Air can hit Flying.
+    // Holy ignores Shielded and Stealth.
   },
 
   // Damage multiplier by enemy kind (row) and damage element (column). Missing = 1.

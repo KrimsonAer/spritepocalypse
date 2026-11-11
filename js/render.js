@@ -370,6 +370,18 @@ function drawEnemy(g, e) {
   if (e.maxShield && e.shield > 0) {
     g.fillStyle = "#38bdf8"; g.fillRect(Math.round(x), Math.round(y) - 3, Math.round(w * (e.shield / e.maxShield)), 2);
   }
+  // little pixel shields at the top right of the bar: grey while Armored (gone once shredded),
+  // blue while it still has shield left (gone when the shield is used up, back when it refills)
+  const icons = [];
+  if (e.maxShield && e.shield > 0) icons.push("#38bdf8");
+  if (e.armored && !e.shredded) icons.push("#9ca3af");
+  const iu = Math.max(2, Math.round(s * 0.045));                 // one icon pixel (about 10 px icons on a phone)
+  let ix = Math.round(x + w) - 5 * iu + Math.round(iu * 1.5);     // rightmost icon pokes past the bar end
+  const iy = Math.round(y) - 3 * iu;
+  for (let k = icons.length - 1; k >= 0; k--) {
+    drawShieldIcon(g, ix, iy, iu, icons[k]);
+    ix -= 6 * iu;
+  }
   // status pips under the sprite
   const pips = [];
   if (e.burn) pips.push(ELEMENT_COLORS.Fire);
@@ -383,6 +395,19 @@ function drawEnemy(g, e) {
     g.fillStyle = "#1e293b"; g.fillRect(Math.round(centre(e.x) - (pips.length * (u + 2)) / 2 + i * (u + 2)) - 1, Math.round(centre(e.y) + s * e.size * 0.45) - 1, u + 2, u + 2);
     g.fillStyle = color; g.fillRect(Math.round(centre(e.x) - (pips.length * (u + 2)) / 2 + i * (u + 2)), Math.round(centre(e.y) + s * e.size * 0.45), u, u);
   });
+}
+
+// A 5x5-pixel shield with a dark outline and a light highlight. (x, y) is its top left corner.
+const SHIELD_ROWS = ["XXXXX", "XXXXX", "XXXXX", ".XXX.", "..X.."];
+function drawShieldIcon(g, x, y, u, color) {
+  for (const [fill, pad] of [["#1e293b", 1], [color, 0]]) {
+    g.fillStyle = fill;
+    SHIELD_ROWS.forEach((row, r) => {
+      for (let c = 0; c < 5; c++) if (row[c] === "X") g.fillRect(x + c * u - pad, y + r * u - pad, u + 2 * pad, u + 2 * pad);
+    });
+  }
+  g.fillStyle = "rgba(255, 255, 255, 0.6)";
+  g.fillRect(x + u, y + u, u, u);
 }
 
 // Large announcement across the board (maze rating, wave clear). Pops in, holds, fades out.
