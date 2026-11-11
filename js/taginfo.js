@@ -8,7 +8,7 @@ export const TOWER_TAG_INFO = {
   // shape
   Single: "Fires one shot at one enemy.",
   Splash: "Fires a shot that bursts and hits everything near the impact.",
-  AoE: "Pulses, hitting every enemy within its range at once.",
+  Pulse: "Pulses, hitting every enemy within its range at once.",
   Pierce: "Fires a straight shot that passes through every enemy in its line.",
   Chain: "Zaps one enemy, then the zap hops to others nearby, weaker each hop.",
   Beam: "Holds a steady beam on one enemy that grows stronger the longer it stays on them.",
@@ -19,10 +19,10 @@ export const TOWER_TAG_INFO = {
   Fire: "Sets enemies alight so they keep burning for a while.",
   Ice: "Chills enemies, slowing them down.",
   Poison: "Poisons enemies. The poison builds up with every hit.",
-  Lightning: "Sometimes jolts an enemy, stopping it for a moment.",
+  Lightning: "Sometimes staggers an enemy, stopping it for a moment.",
   Holy: "Cuts straight through shields and can always see hidden enemies.",
   Dark: "Curses enemies so they take more damage from everything.",
-  Water: "Washes enemies a little way away from this tower.",
+  Water: "Knocks enemies a little way back down the path.",
   Nature: "Roots enemies to the spot for a moment.",
   Sonic: "Sound reaches everything, including flying enemies.",
   // range
@@ -38,14 +38,30 @@ export const TOWER_TAG_INFO = {
   Stun: "Sometimes stuns an enemy, stopping it for a moment.",
   Slow: "Slows the enemies it hits. On a Support tower, slows everything inside its range.",
   Bleed: "Leaves enemies bleeding, taking extra damage over time.",
-  Knockback: "Shoves enemies directly away from this tower. That can push them forwards, so place it with care.",
+  Knockback: "Shoves enemies back down the path, the way they came.",
   Shred: "Strips armour off the enemies it hits, for good.",
   Gold: "Earns extra gold. Attackers earn more from their kills, Supports pay out after every wave.",
   Buff: "Neighbouring towers hit harder.",
   Haste: "Neighbouring towers attack faster.",
   Reach: "Neighbouring towers can reach further.",
   Heal: "Gives a heart back every few waves.",
-  Toy: "It is a toy. It does not hit very hard.",
+  Weak: "Does not hit very hard."
+};
+
+// An element on a Support tower does not attack: it lends its effect to the towers on the
+// 8 blocks around it. These replace the normal element descriptions on Support towers.
+export const SUPPORT_ELEMENT_INFO = {
+  Physical: "Lends nothing extra. Plain damage has no effect to share.",
+  Magic: "Lends nothing extra. Magic has no effect to share.",
+  Fire: "Neighbouring towers set the enemies they hit alight.",
+  Ice: "Neighbouring towers chill the enemies they hit, slowing them.",
+  Poison: "Neighbouring towers poison the enemies they hit.",
+  Lightning: "Neighbouring towers sometimes stagger the enemies they hit.",
+  Holy: "Lends nothing extra to its neighbours.",
+  Dark: "Neighbouring towers curse the enemies they hit, so they take more damage.",
+  Water: "Neighbouring towers knock enemies a little way back down the path.",
+  Nature: "Neighbouring towers root the enemies they hit for a moment.",
+  Sonic: "Lends nothing extra to its neighbours.",
 };
 
 export const ENEMY_TAG_INFO = {

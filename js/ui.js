@@ -18,7 +18,7 @@ import { findSubject, pickDrawing } from "./search.js";
 import { state, cellIndex, newRun, startWave, toggleBlock, placeTower, removeTower, moveTower, refundFor, towerPrice } from "./game.js";
 import { view, resize, cellAt, boardPoint } from "./render.js";
 import { sfx, unlockAudio, soundOn, setSound } from "./audio.js";
-import { TOWER_TAG_INFO, ENEMY_TAG_INFO } from "./taginfo.js";
+import { TOWER_TAG_INFO, ENEMY_TAG_INFO, SUPPORT_ELEMENT_INFO } from "./taginfo.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -68,9 +68,12 @@ export function initUI() {
     const hud = $("hud");
     hud.style.width = canvas.style.width;
     hud.style.height = hudH + "px";
-    hud.style.fontSize = Math.round(hudH * 0.6) + "px";
+    // text size follows the bar height, but never so big that icons crowd out the numbers on a narrow board
+    hud.style.fontSize = Math.round(Math.min(hudH * 0.6, parseFloat(canvas.style.width) / 13)) + "px";
+    fitAllStats();
   };
   new ResizeObserver(fit).observe($("stage"));
+  if (document.fonts) document.fonts.ready.then(fitAllStats);          // refit once the number font has loaded
   window.addEventListener("orientationchange", fit);
   fit();
 
@@ -318,7 +321,10 @@ function showCard() {
   } else {
     const t = view.selected;
     // a tower explains its tags only once it is locked in
-    $("card-tags").innerHTML = t.tags.map((tag) => tagChip(tag, t.locked ? TOWER_TAG_INFO[tag] : "")).join("");
+    // a Support tower's element is lent to its neighbours, so it gets its own description
+    const support = t.stats.shape === "Support";
+    const info = (tag) => (support && SUPPORT_ELEMENT_INFO[tag]) || TOWER_TAG_INFO[tag];
+    $("card-tags").innerHTML = t.tags.map((tag) => tagChip(tag, t.locked ? info(tag) : "")).join("");
     $("card-note").textContent = t.locked ? `Locked in. Kills: ${t.kills}. Hover or tap a tag to read it.` : "Not locked yet. Move or remove it for free.";
     if (!t.locked) button(moveMode ? "PICK A BLOCK" : "MOVE", () => { moveMode = !moveMode; showCard(); setMsg(moveMode ? "Tap a free block to move it there." : ""); }, moveMode ? "on" : "");
     button(t.locked ? `SELL +${refundFor(t)}` : "REMOVE", () => { removeTower(t); clearSelection(); }, "danger");
@@ -539,7 +545,31 @@ function setStat(id, value) {
   shown[id] = text;
   const el = $(id);
   el.textContent = text;
-  el.style.fontSize = text.length >= 6 ? "0.62em" : text.length === 5 ? "0.76em" : text.length === 4 ? "0.9em" : "";
+  fitStat(el);
+}
+
+// Shrink a score bar number until it fits inside its box. Measures the number (and the icon
+// beside it) directly, so the floating "+N" chips never count towards the width.
+function fitStat(el) {
+  const box = el.closest(".stat");
+  const max = box.id === "stat-wave" || box.id === "stat-score" ? 1.05 : 1.35;   // VT323 runs small, so start big
+  const pad = box.clientWidth * 0.08;
+  const icon = box.querySelector(".ico");
+  let size = max;
+  el.style.fontSize = size + "em";
+  const fits = () => {
+    const room = box.clientWidth - pad - (icon ? icon.getBoundingClientRect().width + 4 : 0);
+    return el.getBoundingClientRect().width <= room && el.offsetHeight <= box.clientHeight;
+  };
+  while (size > 0.4 && !fits()) {
+    size -= 0.05;
+    el.style.fontSize = size + "em";
+  }
+}
+
+/** Refit every score bar number (the bar changes size with the window). */
+function fitAllStats() {
+  for (const id of ["hud-hearts", "hud-gold", "hud-wave", "hud-score"]) fitStat($(id));
 }
 
 function refreshScoreBar() {

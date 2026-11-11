@@ -116,7 +116,7 @@ export const CONFIG = {
     shapes: {
       Single: { dmg: 1.0, cd: 1.0 },                // one projectile, one target
       Splash: { dmg: 0.7, cd: 1.3, radius: 1.1 },   // projectile that bursts on impact
-      AoE: { dmg: 0.55, cd: 1.2 },                  // pulse that hits everything in range of the tower
+      Pulse: { dmg: 0.55, cd: 1.2 },                // pulse that hits everything in range of the tower
       Pierce: { dmg: 0.75, cd: 1.2, width: 0.45 },  // straight shot through every enemy in its line
       Chain: { dmg: 0.6, cd: 1.1, jumps: 3, jumpRange: 2.2, falloff: 0.7 }, // zap that hops between enemies
       Beam: { dmg: 0.9, cd: 1.0, rampPerSec: 0.5, rampMax: 3.0 },           // continuous, grows on one target
@@ -133,7 +133,7 @@ export const CONFIG = {
     physicalBonus: 1.25,     // Physical hits harder to make up for armour and having no status effect
     rapid: { cd: 0.45, dmg: 0.5 },   // Rapid: fires faster for less
     heavy: { cd: 2.0, dmg: 2.6 },    // Heavy: fires slower for much more
-    toyDamage: 0.5,          // Toy: damage multiplier (deliberately weak)
+    weakDamage: 0.5,         // Weak: damage multiplier (deliberately weak, mostly toys)
     critChance: 0.2,         // Crit: chance per hit
     critMultiplier: 3,       // Crit: damage multiplier
     stunChance: 0.15,        // Stun: chance per hit
@@ -142,7 +142,7 @@ export const CONFIG = {
     slowTime: 2,             // Slow: seconds
     bleedShare: 0.4,         // Bleed: extra damage over time, as a share of the hit
     bleedTime: 3,            // Bleed: seconds
-    knockback: 0.5,          // Knockback: cells pushed back along the path
+    knockback: 0.9,          // Knockback: cells pushed back along the path
     knockbackCooldown: 1.5,  // Knockback: seconds before the same enemy can be pushed again
     // Support auras apply to the 8 blocks around the support tower.
     buffDamage: 0.3,         // Buff: +30% damage to each neighbour (stacks)
@@ -159,7 +159,7 @@ export const CONFIG = {
     Fire: { burnShare: 0.5, burnTime: 3 },                    // burn: share of the hit dealt again over time
     Ice: { slow: 0.6, time: 2 },                              // chill: speed multiplier and seconds
     Poison: { share: 0.7, time: 5, maxStacks: 5 },            // poison: stacking damage over time
-    Lightning: { stunChance: 0.2, stunTime: 0.4 },            // jolt: short stun
+    Lightning: { stunChance: 0.2, stunTime: 0.4 },            // stagger: short stun
     Dark: { curse: 1.25, time: 3 },                           // curse: enemy takes more damage
     Water: { knockback: 0.3 },                                // splash: small push back
     Nature: { root: 0.5, cooldown: 3 },                       // root: brief hold, then immune for a while

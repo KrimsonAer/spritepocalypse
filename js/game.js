@@ -368,7 +368,7 @@ export function towerStats(tags) {
   let cd = T.baseCooldown * sh.cd;
   if (has("Rapid")) { cd *= T.rapid.cd; dmg *= T.rapid.dmg; }
   if (has("Heavy")) { cd *= T.heavy.cd; dmg *= T.heavy.dmg; }
-  if (has("Toy")) dmg *= T.toyDamage;
+  if (has("Weak")) dmg *= T.weakDamage;
   if (elems.includes("Physical")) dmg *= 1 + (T.physicalBonus - 1) / elems.length;
   return {
     shape, elems, rangeTag, range: rg.cells, dmg, cd,
@@ -686,7 +686,7 @@ function updateTower(tower, dt) {
   tower.recoil = 1;
   sfx.shoot(s.elems[0]);
 
-  if (s.shape === "AoE") {
+  if (s.shape === "Pulse") {
     const range = towerRange(tower);
     for (const e of enemiesInRange(tower, range)) applyHit(tower, e, s.dmg, { sure: true });
     state.fx.push({ kind: "ring", x: tower.x, y: tower.y, r: range, color: s.color, life: 0.3, max: 0.3 });
@@ -827,7 +827,7 @@ function applyStatuses(tower, e, dealt) {
     } else if (el === "Dark") {
       e.curseUntil = now + C.Dark.time;
     } else if (el === "Water") {
-      pushEnemy(e, C.Water.knockback, tower);
+      pushEnemy(e, C.Water.knockback);
     } else if (el === "Nature" && now > e.rootImmuneUntil && !e.unstoppable) {
       stunEnemy(e, C.Nature.root);
       e.rootImmuneUntil = now + C.Nature.cooldown;
@@ -839,7 +839,7 @@ function applyStatuses(tower, e, dealt) {
     const dps = (dealt * T.bleedShare) / T.bleedTime;
     if (!e.bleed || dps >= e.bleed.dps) e.bleed = { dps, until: now + T.bleedTime, color: "#dc2626" };
   }
-  if (s.knockback) pushEnemy(e, T.knockback, tower);
+  if (s.knockback) pushEnemy(e, T.knockback);
   if (s.shred) e.shredded = true;
 }
 
@@ -861,26 +861,20 @@ function stunEnemy(e, seconds) {
 }
 
 /**
- * Knockback shoves an enemy directly AWAY from the tower, along its route.
- * If the route ahead leads away from the tower, that means the enemy is pushed forwards,
- * so a knockback tower has to be placed where "away" is back the way the enemy came.
- * A chevron marks each shove: blue when it sent the enemy back, red when it helped it along.
+ * Knockback shoves an enemy back down its route, the way it came, wherever the tower stands.
+ * A chevron marks each shove, pointing the way the enemy was pushed.
  */
-function pushEnemy(e, cells, tower) {
+function pushEnemy(e, cells) {
   if (e.unstoppable || state.time < e.kbImmuneUntil) return;
   if (e.boss) cells *= CONFIG.boss.control;
-  const max = e.path.len - 0.05;
-  const back = pathPoint(e.path, Math.max(0, e.d - cells));
-  const ahead = pathPoint(e.path, Math.min(max, e.d + cells));
-  const forwards = Math.hypot(ahead.x - tower.x, ahead.y - tower.y) > Math.hypot(back.x - tower.x, back.y - tower.y);
   const fromX = e.x, fromY = e.y;
-  e.d = Math.min(max, Math.max(0, e.d + (forwards ? cells : -cells)));
+  e.d = Math.max(0, e.d - cells);
   const p = pathPoint(e.path, e.d);
   e.x = p.x; e.y = p.y;
   e.kbImmuneUntil = state.time + T.knockbackCooldown;
   const len = Math.hypot(e.x - fromX, e.y - fromY);
   if (len > 0.01) {
-    state.fx.push({ kind: "chev", x: e.x, y: e.y, dx: (e.x - fromX) / len, dy: (e.y - fromY) / len, color: forwards ? "#ef4444" : "#38bdf8", life: 0.45, max: 0.45 });
+    state.fx.push({ kind: "chev", x: e.x, y: e.y, dx: (e.x - fromX) / len, dy: (e.y - fromY) / len, color: "#38bdf8", life: 0.45, max: 0.45 });
   }
 }
 

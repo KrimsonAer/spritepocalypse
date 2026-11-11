@@ -76,14 +76,19 @@ canvas, .sprite { image-rendering: pixelated; image-rendering: crisp-edges; }
   white-space: nowrap;
   line-height: 1;
 }
-#stat-hearts, #stat-wave { flex: 0.8 1 0; }
-#stat-score { flex: 1.25 1 0; }
-.stat b { font-weight: 700; font-size: 1em; display: inline-block; }
+/* box widths: gold and score need the most room */
+#stat-hearts { flex: 0.95 1 0; }
+#stat-gold { flex: 1.25 1 0; }
+#stat-wave { flex: 0.75 1 0; }
+#stat-score { flex: 1.2 1 0; }
+/* Numbers use VT323: a pixel font with clear, narrow digits (0 vs 8, 1 vs 7). Sized to fit by ui.js. */
+.stat b { font-family: "VT323", "Courier New", monospace; font-weight: 400; font-size: 1em; display: inline-block; line-height: 0.8; }
+.stat b { transform-origin: center; }
 .stat .lbl { font-size: 0.3em; color: #94a3b8; letter-spacing: 0.1em; }
 /* wave and score: small label stacked above the number */
 #stat-wave, #stat-score { flex-direction: column; gap: 0.04em; }
-#stat-wave b, #stat-score b { font-size: 0.78em; }
 .stat .ico { width: 0.8em; height: 0.72em; flex: none; }
+.stat { padding: 0 0.12em; }
 #stat-hearts b { color: #fda4af; }
 #stat-gold b { color: #fde047; }
 #stat-wave b { color: #7dd3fc; }
@@ -104,7 +109,8 @@ canvas, .sprite { image-rendering: pixelated; image-rendering: crisp-edges; }
 /* little "+25" that floats down out of a stat onto the board */
 .chip {
   position: absolute; left: 50%; top: 0;
-  font-size: 0.6em; font-weight: 700; color: #fde047;
+  font-family: "VT323", "Courier New", monospace;
+  font-size: 0.8em; font-weight: 400; color: #fde047;
   text-shadow: 2px 2px 0 #0f172a, -1px -1px 0 #0f172a, 1px -1px 0 #0f172a, -1px 1px 0 #0f172a;
   pointer-events: none; z-index: 5;
   animation: chip-rise 0.9s steps(12) forwards;
