@@ -8,8 +8,9 @@
 //      ("giant spider" -> subject "spider", prefer drawings captioned "giant")
 //   4. subjects whose main (last) word is the typed word ("tree" -> any "... tree")
 //   5. subjects containing every typed word, then any typed word
-//   6. the same again after fixing typos word by word ("wizrd" -> "wizard")
-//   7. the closest name by spelling, if it is close enough
+//   6. the word lookup table (common words matched to sprites in advance by a large model)
+//   7. closest in meaning, using a small model in the browser
+//   8. only if that model cannot load: fix typos, then the closest name by spelling
 // Returns null when nothing is close, and the UI asks for a different word.
 // =====================================================================================
 
@@ -90,7 +91,8 @@ function matchWords(words) {
   if (lists.length) {
     lists.sort((a, b) => a.length - b.length);
     const known = new Set(lists[0][0].words);
-    return { subject: pickShortest(lists[0]), hints: words.filter((w) => !known.has(w)) };
+    // only SOME of the typed words are in sprite names: a weak match that the lookup table may beat
+    return { subject: pickShortest(lists[0]), hints: words.filter((w) => !known.has(w)), partial: true };
   }
   return null;
 }
@@ -134,10 +136,22 @@ export async function findSubject(text) {
   if (!phrase) return null;
   const words = phrase.split(" ");
   let hit = matchWords(words);
-  if (hit) return hit;
-  // 6. closest in MEANING, not in spelling ("satan" is a demon, not a satay skewer)
+  if (hit && !hit.partial) return hit;
+  const partial = hit;          // e.g. "giant virus": "giant" is in sprite names, "virus" is not
+  // 6. the word lookup table: about 50,000 common words matched to sprites in advance by a large model
+  if (db.lookup) {
+    if (db.lookup[phrase] !== undefined) return { subject: db.subjects[db.lookup[phrase]], hints: [] };
+    for (let i = words.length - 1; i >= 0; i--) {          // "evil virus": look up each word, last word first
+      const alias = db.aliases[words[i]];
+      if (alias && db.byName.has(alias)) return { subject: db.byName.get(alias), hints: words.filter((_, k) => k !== i) };
+      const id = db.lookup[words[i]];
+      if (id !== undefined) return { subject: db.subjects[id], hints: words.filter((_, k) => k !== i) };
+    }
+  }
+  if (partial) return partial;  // nothing better in the table: keep the literal match
+  // 7. closest in MEANING, not in spelling ("satan" is a demon, not a satay skewer)
   if (CONFIG.semantic.enabled) {
-    const state = await semantic.loading;        // waits for the model the first time
+    const state = await initSemantic();          // the model only downloads the first time it is needed
     if (state === "ready") {
       const best = (await semanticTop(phrase, 1))[0];
       return best && best.score >= CONFIG.semantic.minScore ? { subject: best.subject, hints: [] } : null;
@@ -176,9 +190,10 @@ const semantic = {
   dim: 0,
 };
 
-/** Start loading the model and the subject vectors in the background. Call once at boot. */
+/** Start loading the model and the subject vectors (once). Called on the first search the table cannot answer. */
 export function initSemantic() {
-  if (!CONFIG.semantic.enabled) return semantic.loading;
+  if (!CONFIG.semantic.enabled || semantic.started) return semantic.loading;
+  semantic.started = true;
   semantic.loading = (async () => {
     try {
       const [buf, lib] = await Promise.all([
@@ -202,7 +217,7 @@ export function initSemantic() {
 
 /** The k subjects closest in meaning to the text, best first: [{ subject, score }] with score from -1 to 1. */
 export async function semanticTop(text, k = 5) {
-  if ((await semantic.loading) !== "ready") return [];
+  if ((await initSemantic()) !== "ready") return [];
   const out = await semantic.extractor(text, { pooling: "mean", normalize: true });
   const q = out.data, dim = semantic.dim, V = semantic.vectors;
   const best = [];

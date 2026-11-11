@@ -14,6 +14,7 @@ export const db = {
   byWord: new Map(),   // single word -> [subjects containing that word]
   byHead: new Map(),   // last word of the name -> [subjects]
   aliases: {},         // typed synonym -> subject name
+  lookup: null,        // common word -> subject, built offline by tools/build_lookup.py (null until loaded)
   palette: null,       // Uint8Array, 3 bytes per colour, index 0 is transparent
   packs: new Map(),    // subject id -> Promise<pack>
 };
@@ -25,6 +26,11 @@ export async function loadIndex() {
   const index = await indexRes.json();
   db.palette = new Uint8Array(await palRes.arrayBuffer());
   db.aliases = index.aliases || {};
+  // The word lookup table is optional: the game still works without it (meaning search takes over).
+  fetch(DATA_URL + "lookup.json").then((r) => (r.ok ? r.json() : null)).then((t) => {
+    if (t && t.count === index.subjects.length) db.lookup = t.words;
+    else if (t) console.warn("lookup.json is out of date, re-run tools/build_lookup.py");
+  }).catch(() => {});
   index.subjects.forEach((row, id) => {
     const [name, count, t, e] = row;
     const subject = {

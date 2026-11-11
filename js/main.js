@@ -5,7 +5,7 @@
 // =====================================================================================
 
 import { loadIndex } from "./data.js";
-import { initSemantic, findSubject, semanticTop } from "./search.js";
+import { findSubject, semanticTop } from "./search.js";
 import { state, step } from "./game.js";
 import { draw } from "./render.js";
 import { initUI, onDataReady, refreshUI } from "./ui.js";
@@ -33,7 +33,6 @@ async function boot() {
   try {
     await loadIndex();
     onDataReady();
-    initSemantic();      // meaning search loads in the background, the game is playable meanwhile
   } catch (err) {
     document.getElementById("menu-loading").textContent = err.message;
   }
