@@ -501,6 +501,8 @@ function spawnEnemy(entry) {
   let tags = enemyTagsFor(entry.pack.subject, caption);
   // Flying things skip the whole maze and few towers can reach them, so they are never also Tanky or Armored.
   if (tags.includes("Flying")) tags = tags.filter((t) => t !== "Tanky" && t !== "Armored");
+  // Tanky enemies never heal (Regen or Healer): too hard to wear down.
+  if (tags.includes("Tanky")) tags = tags.filter((t) => t !== "Regen" && t !== "Healer");
   if (entry.boss) tags = tags.filter((t) => t !== "Frail");
   const hpScale = Math.pow(W.hpGrowth, state.wave - 1) * (entry.boss ? CONFIG.boss.hp : 1);
   const speedScale = Math.min(W.maxSpeedGrowth, Math.pow(W.speedGrowth, state.wave - 1));
