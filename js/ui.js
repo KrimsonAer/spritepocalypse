@@ -60,7 +60,18 @@ export function initUI() {
     const st = $("stage");
     const availW = st.clientWidth - 18, availH = st.clientHeight - 18;
     const hudH = Math.max(40, Math.min(110, Math.round(Math.min(availH * 0.085, availW * 0.15))));
-    const hintH = Math.round(hudH * 0.72);        // controls reminder under the board
+    const hintH = Math.round(hudH * 0.72);        // free towers left (the first 5 of a run cost nothing)
+  const free = state.phase === "build" || state.phase === "wave" ? state.freeTowers : 0;
+  if (shown.free !== free) {
+    const was = shown.free;
+    shown.free = free;
+    $("free").classList.toggle("hidden", free <= 0);
+    $("free-count").textContent = free;
+    $("free-pips").innerHTML = Array.from({ length: CONFIG.run.freeTowers }, (_, i) => `<i class="${i < free ? "on" : ""}"></i>`).join("");
+    if (was !== undefined && free < was) kick($("free"), "pop");
+  }
+
+  // controls reminder under the board
     resize(canvas, availW, availH - hudH - hintH);
     const hint = $("hint");
     hint.style.width = canvas.style.width;
