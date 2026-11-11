@@ -174,6 +174,14 @@ export function draw() {
     g.globalAlpha = 1;
   }
 
+  // mines (Mine Layer)
+  for (const m of state.mines || []) {
+    const u = Math.max(2, Math.round(s * 0.06));
+    const mx = Math.round(centre(m.x)), my = Math.round(centre(m.y));
+    g.fillStyle = "#1e293b"; g.fillRect(mx - 2 * u, my - u, 4 * u, 2 * u); g.fillRect(mx - u, my - 2 * u, 2 * u, 4 * u);
+    g.fillStyle = Math.floor(state.time * 3) % 2 ? "#ef4444" : "#7f1d1d"; g.fillRect(mx - Math.round(u / 2), my - Math.round(u / 2), u, u);
+  }
+
   // towers
   for (const t of state.towers) {
     const stunned = state.time < t.stunUntil;
@@ -191,7 +199,23 @@ export function draw() {
       g.strokeStyle = "#f59e0b"; g.lineWidth = 2.5;
       g.strokeRect(t.x * s + 2, t.y * s + 2, s - 4, s - 4);
     }
-    if (stunned) label(g, "zz", t.x, t.y - 0.3, "#475569", 0.8);
+    if (stunned) label(g, t.spiked && state.time < t.spiked ? "*!*" : "zz", t.x, t.y - 0.3, t.spiked && state.time < t.spiked ? "#f59e0b" : "#475569", 0.8);
+    if (t.scared && !stunned) label(g, "!", t.x + 0.32, t.y - 0.32, "#dc2626", 1.1);          // Scary enemy nearby
+    if (t.jammed && !stunned) label(g, "x", t.x - 0.32, t.y - 0.32, "#64748b", 0.9);          // Jammer nearby
+    if (t.stats.shape === "Spin" && !stunned) {                                                // orbiting blades
+      const S = CONFIG.tower.shapes.Spin, u = Math.max(3, Math.round(s * 0.11));
+      for (let b = 0; b < S.blades; b++) {
+        const a = (t.spinAngle || 0) + (b / S.blades) * Math.PI * 2;
+        const bx = Math.round(centre(t.x + Math.cos(a) * S.radius)), by = Math.round(centre(t.y + Math.sin(a) * S.radius));
+        g.fillStyle = "#1e293b"; g.fillRect(bx - u, by - u, 2 * u, 2 * u);
+        g.fillStyle = t.stats.color; g.fillRect(bx - u + 1, by - u + 1, 2 * u - 2, 2 * u - 2);
+      }
+    }
+    if (t.linkTargets && t.beamTarget && !t.beamTarget.dead && !stunned) {                     // Link branches
+      g.strokeStyle = t.stats.color; g.lineWidth = Math.max(1.5, s * 0.035); g.globalAlpha = 0.75;
+      for (const b of t.linkTargets) { g.beginPath(); g.moveTo(centre(t.beamTarget.x), centre(t.beamTarget.y)); g.lineTo(centre(b.x), centre(b.y)); g.stroke(); }
+      g.globalAlpha = 1;
+    }
     // beam
     if (t.beamTarget && !t.beamTarget.dead && !stunned) {
       g.strokeStyle = t.stats.color; g.lineCap = "round";
@@ -209,9 +233,19 @@ export function draw() {
   // shots
   for (const shot of state.shots) {
     g.fillStyle = shot.color;
-    const r = Math.max(2, Math.round(s * (shot.kind === "splash" ? 0.11 : 0.08)));
-    const px = Math.round(centre(shot.x)), py = Math.round(centre(shot.y));
-    if (shot.kind === "pierce") {
+    const r = Math.max(2, Math.round(s * (shot.kind === "splash" || shot.kind === "artillery" ? 0.11 : shot.kind === "pellet" ? 0.05 : 0.08) * (shot.big ? 2 : 1)));
+    let px = Math.round(centre(shot.x)), py = Math.round(centre(shot.y));
+    if (shot.kind === "artillery") {                       // shadow on the ground, shell up in the air
+      g.fillStyle = "rgba(30, 41, 59, 0.25)"; g.fillRect(px - r, py - Math.round(r / 2), r * 2, r);
+      py -= Math.round((shot.lift || 0) * s);
+    }
+    if (shot.kind === "boomerang") {
+      g.save(); g.translate(px, py); g.rotate(shot.spin); g.fillStyle = shot.color;
+      g.fillRect(-r * 2, -Math.round(r / 2), r * 4, r); g.fillRect(-Math.round(r / 2), -r * 2, r, r * 4);
+      g.restore();
+      continue;
+    }
+    if (shot.kind === "pierce" || shot.kind === "pellet") {
       g.strokeStyle = shot.color; g.lineWidth = r; g.lineCap = "butt";
       const len = s * 0.35, sp = Math.hypot(shot.vx, shot.vy);
       g.beginPath(); g.moveTo(px, py); g.lineTo(px - (shot.vx / sp) * len, py - (shot.vy / sp) * len); g.stroke();
@@ -250,6 +284,15 @@ export function draw() {
         }
       }
       g.restore();
+    } else if (f.kind === "sweep") {
+      g.globalAlpha = k * 0.7; g.fillStyle = f.color;
+      const th = Math.max(4, Math.round(s * 0.35));
+      if (f.row) g.fillRect(0, Math.round(centre(f.at) - th / 2), s * B.cols, th);
+      else g.fillRect(Math.round(centre(f.at) - th / 2), 0, th, s * B.rows);
+    } else if (f.kind === "dirt") {
+      g.globalAlpha = k; g.fillStyle = "#78350f";
+      const u = Math.max(2, Math.round(s * 0.07));
+      g.fillRect(Math.round(centre(f.x)), Math.round(centre(f.y)), u, u);
     } else if (f.kind === "spark") {
       g.globalAlpha = Math.min(1, k * 1.5);
       const u = Math.max(2, Math.round(f.size * s));
@@ -350,7 +393,10 @@ function drawEnemy(g, e) {
     g.fillStyle = "rgba(30, 41, 59, 0.18)";
     g.beginPath(); g.ellipse(centre(e.x), centre(e.y) + s * 0.3, s * e.size * 0.3, s * e.size * 0.12, 0, 0, Math.PI * 2); g.fill();
   }
-  const lift = e.flying ? -0.18 + Math.sin(now * 6 + e.id) * 0.04 : Math.abs(Math.sin(now * 8 + e.id)) * -0.04;
+  let lift = e.flying ? -0.18 + Math.sin(now * 6 + e.id) * 0.04 : Math.abs(Math.sin(now * 8 + e.id)) * -0.04;
+  if (e.onBlock) lift -= 0.45;                                    // Jump: hopping over a block
+  if (e.underground) { drawDigger(g, e); return; }                // Digger: a moving pile of dirt
+  if (e.egg) { drawEgg(g, e); return; }
   if (e === view.selectedEnemy) {      // inspection ring
     g.strokeStyle = "#f59e0b"; g.lineWidth = Math.max(2, s * 0.06); g.setLineDash([5, 4]);
     g.beginPath(); g.arc(centre(e.x), centre(e.y + lift), s * e.size * 0.62, 0, Math.PI * 2); g.stroke();
@@ -382,6 +428,12 @@ function drawEnemy(g, e) {
     drawShieldIcon(g, ix, iy, iu, icons[k]);
     ix -= 6 * iu;
   }
+  // special states above the health bar
+  const tagY = e.y + lift - e.size * 0.5 - 0.42;
+  if (now < e.sleepUntil) label(g, "z", e.x + 0.25, tagY, "#64748b", 0.8);
+  if (now < e.confuseUntil) label(g, "?", e.x + 0.25, tagY, "#a855f7", 0.9);
+  if (now < e.markUntil) label(g, "+", e.x - 0.25, tagY, "#f97316", 0.9);
+  if (now < e.dashUntil) label(g, ">>", e.x, e.y + 0.3, "#0ea5e9", 0.6);
   // status pips under the sprite
   const pips = [];
   if (e.burn) pips.push(ELEMENT_COLORS.Fire);
@@ -395,6 +447,38 @@ function drawEnemy(g, e) {
     g.fillStyle = "#1e293b"; g.fillRect(Math.round(centre(e.x) - (pips.length * (u + 2)) / 2 + i * (u + 2)) - 1, Math.round(centre(e.y) + s * e.size * 0.45) - 1, u + 2, u + 2);
     g.fillStyle = color; g.fillRect(Math.round(centre(e.x) - (pips.length * (u + 2)) / 2 + i * (u + 2)), Math.round(centre(e.y) + s * e.size * 0.45), u, u);
   });
+}
+
+// Digger underground: one of the chosen "dirt pile" drawings, rocking a little as it moves.
+function drawDigger(g, e) {
+  const s = view.cell;
+  const pick = CONFIG.look.diggerSprite.drawings;
+  if (state.digPack) {
+    const i = pick[e.digSprite % pick.length] % state.digPack.count;
+    g.save();
+    g.translate(centre(e.x), centre(e.y));
+    g.rotate(Math.sin(state.time * 10 + e.id) * 0.08);
+    const px = Math.round(s * 0.7);
+    g.drawImage(state.digPack.sprite(i), -px / 2, -px / 2, px, px);
+    g.restore();
+  } else {
+    g.fillStyle = "#78350f";
+    g.beginPath(); g.ellipse(centre(e.x), centre(e.y) + s * 0.1, s * 0.3, s * 0.18, 0, 0, Math.PI * 2); g.fill();
+  }
+}
+
+// Egg (Egg Layer): a small pixel egg that wobbles faster as it gets ready to hatch.
+function drawEgg(g, e) {
+  const s = view.cell, u = Math.max(2, Math.round(s * 0.06));
+  const left = Math.max(0, e.hatchAt - state.time);
+  const wob = Math.round(Math.sin(state.time * (left < 1.5 ? 30 : 8)) * u * 0.5);
+  const x = Math.round(centre(e.x)) + wob, y = Math.round(centre(e.y));
+  const rows = [".XX.", "XXXX", "XXXX", "XXXX", ".XX."];
+  for (const [fill, pad] of [["#1e293b", 1], ["#fef9c3", 0]]) {
+    g.fillStyle = fill;
+    rows.forEach((row, r) => { for (let c = 0; c < 4; c++) if (row[c] === "X") g.fillRect(x - 2 * u + c * u - pad, y - 3 * u + r * u - pad, u + 2 * pad, u + 2 * pad); });
+  }
+  g.fillStyle = "#f59e0b"; g.fillRect(x - u, y - u, u, u);
 }
 
 // A 5x5-pixel shield with a dark outline and a light highlight. (x, y) is its top left corner.

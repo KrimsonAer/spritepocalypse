@@ -338,7 +338,8 @@ function showCard() {
     const combos = (t.combos || []).map((cat) => `<span class="tag combo explains" style="--c:${COMBOS[cat].color}" data-tip="${(t.combo.strong || []).includes(cat) && COMBOS[cat].strong ? COMBOS[cat].strong : COMBOS[cat].desc}">${COMBOS[cat].name.toUpperCase()} COMBO</span>`).join("");
     $("card-tags").innerHTML = t.tags.map((tag) => tagChip(tag, t.locked ? info(tag) : "")).join("") + combos;
     shown.selCombos = (t.combos || []).join(" ");
-    $("card-note").textContent = t.locked ? `Locked in. Kills: ${t.kills}. Hover or tap a tag to read it.` : "Not locked yet. Move or remove it for free.";
+    const copying = t.tags.includes("Copycat") ? (t.copying ? `Copying the ${t.copying.subject.name}. ` : "Nothing next to it to copy. ") : "";
+    $("card-note").textContent = copying + (t.locked ? `Locked in. Kills: ${t.kills}. Hover or tap a tag to read it.` : "Not locked yet. Move or remove it for free.");
     if (!t.locked) button(moveMode ? "PICK A BLOCK" : "MOVE", () => { moveMode = !moveMode; showCard(); setMsg(moveMode ? "Tap a free block to move it there." : ""); }, moveMode ? "on" : "");
     button(t.locked ? `SELL +${refundFor(t)}` : "REMOVE", () => { removeTower(t); clearSelection(); }, "danger");
   }

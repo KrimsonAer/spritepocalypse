@@ -121,6 +121,14 @@ export const CONFIG = {
       Chain: { dmg: 0.6, cd: 1.1, jumps: 3, jumpRange: 2.2, falloff: 0.7 }, // zap that hops between enemies
       Beam: { dmg: 0.9, cd: 1.0, rampPerSec: 0.5, rampMax: 3.0 },           // continuous, grows on one target
       Support: { dmg: 0, cd: 1.0 },                 // no attack, helps neighbours or the economy
+      // attack patterns (added 2026-11-11)
+      Link: { dmg: 0.8, cd: 1.0, branches: 2, branchRange: 2, branchShare: 0.5 },   // beam that branches to nearby enemies
+      Spin: { dmg: 0.4, cd: 1.0, blades: 3, radius: 1.2, turnsPerSec: 0.8, hitEvery: 0.5 }, // orbiting blades
+      Boomerang: { dmg: 0.7, cd: 1.4 },             // flies out to the target spot and back, hitting both ways
+      Ricochet: { dmg: 1.0, cd: 1.0, bounceRange: 2.5, bounceShare: 0.7 },          // one bounce to a second enemy
+      Artillery: { dmg: 1.1, cd: 1.6, radius: 1.4, minRange: 1.5, flight: 0.9 },    // lobbed, cannot hit close
+      Spread: { dmg: 0.35, cd: 1.2, pellets: 5, cone: 0.45 },                       // 5 pellets in a cone (radians)
+      Sweep: { dmg: 0.8, cd: 2.0 },                 // hits every enemy in its whole row or column
     },
     // Range: reach in cells, and the damage multiplier that pays for a short reach.
     ranges: {
@@ -154,6 +162,31 @@ export const CONFIG = {
     pierceSpeed: 14,         // cells per second for Pierce shots
   },
 
+  // ---------------------------------------------------------------- SPECIAL TOWER TAGS (added 2026-11-11)
+  special: {
+    antiAirDamage: 2,        // Anti-Air: damage multiplier against flyers (it can only target flyers)
+    giantShare: 0.03,        // Giant Slayer: extra damage = this share of the target's max health
+    giantCap: 3,             // Giant Slayer: that extra is capped at this many times the tower's normal hit (bosses)
+    monstrousEvery: 10,      // Monstrous: every Nth attack is a big one
+    monstrousDamage: 4,      // Monstrous: damage multiplier of the big attack
+    burstShots: 3, burstGap: 0.12, burstDamage: 0.4, burstCooldown: 2.2,   // Burst
+    explodeShare: 0.5, explodeRadius: 1.2,   // Explode: share of the killing hit dealt around the victim
+    timewarpEvery: 8, timewarpCells: 2.5,    // Timewarp: every N seconds the next hit sends the enemy back
+    tastyEvery: 6, tastyTime: 4, tastyDamage: 1.3,   // Tasty: mark, how long, damage taken while marked
+    magnetCells: 0.5,        // Magnet: pull towards the tower per hit (same cooldown as knockback)
+    sleepTime: 3, sleepChance: 0.35, sleepImmune: 6,      // Sleep: until hit again or time runs out
+    confuseTime: 1.5, confuseChance: 0.25, confuseImmune: 5,   // Confuse: walks backwards
+    freezeEvery: 10, freezeTime: 1,           // Freeze Frame: stops every enemy in range
+    echoDelay: 0.5, echoDamage: 0.5,          // Echo: each attack repeats once
+    mineEvery: 5, mineMax: 3, mineDamage: 2, mineRadius: 1, mineTrigger: 0.4,  // Mine Layer
+    warmupMax: 0.6, warmupTime: 20,           // Warm-up: up to +60% attack speed after 20 s of firing, resets each wave
+    trophyPerKill: 0.01, trophyMax: 0.5,      // Trophy: +1% damage per kill, up to +50%
+    glassDamage: 2, glassWaves: 3,            // Glass Cannon: double damage, breaks after 3 waves
+    luckyCrit: 0.1, luckyGoldChance: 0.2, luckyGold: 3,   // Lucky
+    shatterDamage: 1.5,       // Shatter: damage multiplier against slowed or stopped enemies
+    executeShare: 0.05,       // Execute: kills enemies left under this share of their max health
+  },
+
   // ---------------------------------------------------------------- ELEMENT STATUS EFFECTS
   elements: {
     Fire: { burnShare: 0.5, burnTime: 3 },                    // burn: share of the hit dealt again over time
@@ -179,6 +212,29 @@ export const CONFIG = {
     Nature: { Nature: 0.25, Fire: 2, Poison: 1.5, Water: 0.5 },
     Machine: { Lightning: 2, Water: 1.5, Poison: 0.1 },
     Ethereal: { Physical: 0.25, Magic: 1.5, Holy: 1.5, Poison: 0.25 },
+  },
+
+  // ---------------------------------------------------------------- SPECIAL ENEMY TAGS (added 2026-11-11)
+  enemyX: {
+    dashEvery: 4, dashTime: 0.6, dashSpeed: 3,
+    scaryRange: 1.5, scaryRate: 0.7,          // Scary: nearby towers attack at 70% speed
+    diggerTime: 6,                            // Digger: underground (only area attacks reach it)
+    rallyRange: 1.6, rallySpeed: 1.25,
+    transportSpeed: 1.5, transportSplit: 3, transportChildSpeed: 0.7, transportChildHp: 0.35,
+    thiefBase: 15, thiefPerWave: 2,           // Thief: gold stolen if it reaches home
+    jammerRange: 1.5,                         // Jammer: Support auras off for towers this close
+    enrageSpeed: 0.6,                         // Enrage: up to +60% speed at low health
+    undyingHp: 0.3,                           // Undying: revives once with this share of health
+    cleanseEvery: 4,
+    spikyStun: 0.5,                           // Spiky: Melee towers that hit it are stunned
+    growPerSec: 0.04, growMaxSize: 1.6,       // Growing: +4% max health a second
+    summonEvery: 5, summonMax: 4, summonHp: 0.25,
+    eggEvery: 4, eggHatch: 4, eggHp: 0.3,     // Egg Layer
+    cocoonSpeed: 0.5, cocoonHatchSpeed: 1.6,  // Cocoon: slow and armoured, hatches into a fast flyer halfway
+    blinkCells: 1.5, blinkHit: 0.15, blinkCooldown: 3,   // Blink: teleports forward after a big hit
+    swarmFactor: 3, swarmHp: 0.25, swarmSize: 0.6,       // Swarm: 3x as many, each 25% health
+    pinataSpeed: 1.4, pinataHp: 0.5, pinataGold: 5,
+    decoyHp: 0.5,
   },
 
   // ---------------------------------------------------------------- SEARCH BOX
@@ -207,7 +263,9 @@ export const CONFIG = {
     pencilFill: "#c9ced8",   // block shading
     damageNumbers: true,     // floating damage numbers
     groupBanner: true,       // name and tags of each enemy group as it starts to arrive
-    pathPreview: true,       // dotted line showing the route enemies will take (build phase)
+    pathPreview: true,
+    // Digger enemies are drawn as one of these drawings while underground (tools/sprite_sheet.py shows the numbers)
+    diggerSprite: { subject: "dirt pile", drawings: [1, 7, 8, 10, 12, 13, 14, 19] },       // dotted line showing the route enemies will take (build phase)
   },
   audio: {
     volume: 0.25,            // master volume, 0..1

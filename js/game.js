@@ -8,7 +8,7 @@
 // =====================================================================================
 
 import { CONFIG, ELEMENT_COLORS, COMBOS, COMBO_STRONGER } from "./config.js";
-import { loadPack, randomSubject, enemyTagsFor } from "./data.js";
+import { db, loadPack, randomSubject, enemyTagsFor } from "./data.js";
 import { pickDrawing } from "./search.js";
 import { sfx } from "./audio.js";
 
@@ -59,7 +59,7 @@ export function newRun() {
     phase: "build", paused: false, loadingWave: false, time: 0,
     hearts: CONFIG.run.hearts, gold: CONFIG.run.startGold, wave: 1, score: 0, kills: 0,
     freeTowers: CONFIG.run.freeTowers, paidTowers: 0,
-    towers: [], enemies: [], shots: [], fx: [], spawnQueue: [], banner: null,
+    towers: [], enemies: [], shots: [], fx: [], spawnQueue: [], banner: null, mines: [],
   });
   state.shownTier = -1;      // which layout rating word was last announced (-1 = none yet)
   state.blocks.fill(0);
@@ -206,6 +206,41 @@ export function refreshPaths() {
   state.groundPath = makePath([entry, ...a]);
   state.groundPaths = same ? [state.groundPath] : [state.groundPath, makePath([entry, ...b])];
   state.flyPath = makePath([entry, { x: B.home.x, y: B.home.y }]);
+  // Jump enemies may hop over one block, so they get their own (possibly shorter) route
+  const jump = findJumpPath();
+  state.jumpPath = jump && jump.length < a.length ? makePath([entry, ...jump]) : null;
+}
+
+/** Shortest route that is allowed to cross ONE block (a single hop, never two blocks in a row). */
+function findJumpPath() {
+  const total = B.cols * B.rows;
+  const prev = new Int32Array(total * 2).fill(-1);       // state = cell * 2 + (hop used ? 1 : 0)
+  const start = cellIndex(B.spawn.x, B.spawn.y) * 2;
+  const home = cellIndex(B.home.x, B.home.y);
+  const queue = [start];
+  prev[start] = start;
+  let goal = -1;
+  for (let q = 0; q < queue.length; q++) {
+    const st = queue[q], cell = st >> 1, used = st & 1;
+    if (cell === home) { goal = st; break; }
+    const cx = cell % B.cols, cy = (cell / B.cols) | 0;
+    const onBlock = !!state.blocks[cell];
+    for (const [dx, dy] of [[0, 1], [-1, 0], [1, 0], [0, -1]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (!inBoard(nx, ny)) continue;
+      const ni = cellIndex(nx, ny);
+      let nu = used;
+      if (state.blocks[ni]) { if (used || onBlock) continue; nu = 1; }
+      const ns = ni * 2 + nu;
+      if (prev[ns] !== -1) continue;
+      prev[ns] = st;
+      queue.push(ns);
+    }
+  }
+  if (goal < 0) return null;
+  const cells = [];
+  for (let st = goal; ; st = prev[st]) { const c = st >> 1; cells.push({ x: c % B.cols, y: (c / B.cols) | 0 }); if (st === start) break; }
+  return cells.reverse();
 }
 
 // ------------------------------------------------------------------------------------
@@ -364,26 +399,40 @@ export function towerStats(tags) {
   if (!elems.length && shape !== "Support") elems = ["Physical"];
   const rangeTag = tags.find((t) => RANGES.includes(t)) || T.defaultRange;
   const has = (t) => tags.includes(t);
+  const X = CONFIG.special;
   const sh = T.shapes[shape], rg = T.ranges[rangeTag];
   let dmg = T.baseDamage * sh.dmg * rg.dmg;
   let cd = T.baseCooldown * sh.cd;
   if (has("Rapid")) { cd *= T.rapid.cd; dmg *= T.rapid.dmg; }
   if (has("Heavy")) { cd *= T.heavy.cd; dmg *= T.heavy.dmg; }
   if (has("Weak")) dmg *= T.weakDamage;
+  if (has("Burst")) { cd *= X.burstCooldown; dmg *= X.burstDamage; }
+  if (has("Glass Cannon")) dmg *= X.glassDamage;
   if (elems.includes("Physical")) dmg *= 1 + (T.physicalBonus - 1) / elems.length;
+  const sonic = elems.includes("Sonic");
   return {
     shape, elems, rangeTag, range: rg.cells, dmg, cd,
-    antiAir: has("Anti-Air") || elems.includes("Sonic"),
+    // Versatile hits ground and air; Anti-Air hits ONLY air, harder; Sonic hits everything
+    antiAir: has("Versatile") || has("Anti-Air") || sonic,
+    airOnly: has("Anti-Air") && !sonic,
+    area: ["Pulse", "Splash", "Artillery", "Sweep", "Spin"].includes(shape),   // can reach Digger enemies underground
+    targeting: has("Assassin") ? "assassin" : has("Giant Slayer") ? "giant" : has("Tactical") ? "tactical" : null,
     holy: elems.includes("Holy"),
     crit: has("Crit"), stun: has("Stun"), slow: has("Slow"), bleed: has("Bleed"),
     knockback: has("Knockback"), shred: has("Shred"), gold: has("Gold"),
     buff: has("Buff"), haste: has("Haste"), reach: has("Reach"), heal: has("Heal"),
+    monstrous: has("Monstrous"), burst: has("Burst"), explode: has("Explode"), timewarp: has("Timewarp"),
+    tasty: has("Tasty"), magnet: has("Magnet"), sleep: has("Sleep"), confuse: has("Confuse"),
+    freezeFrame: has("Freeze Frame"), echo: has("Echo"), mineLayer: has("Mine Layer"), warmup: has("Warm-up"),
+    trophy: has("Trophy"), glass: has("Glass Cannon"), lucky: has("Lucky"), shatter: has("Shatter"),
+    execute: has("Execute"), copycat: has("Copycat"),
     color: ELEMENT_COLORS[elems[0]] || "#6b7280",
   };
 }
 
 /** Support towers boost the 8 blocks around them. Recomputed whenever towers change. */
 export function refreshAuras() {
+  refreshCopycats();
   refreshCombos();
   for (const t of state.towers) t.aura = { dmg: 1, rate: 1, range: 0, imbue: [] };
   for (const s of state.towers) {
@@ -399,8 +448,31 @@ export function refreshAuras() {
   }
 }
 
+/**
+ * Copycat towers take the attack of the strongest attacking tower on the 8 blocks around them
+ * (best damage per second). With nobody to copy they use their own tags.
+ */
+function refreshCopycats() {
+  for (const t of state.towers) {
+    if (!t.tags.includes("Copycat")) continue;
+    let best = null, bestDps = 0;
+    for (const o of state.towers) {
+      if (o === t || o.tags.includes("Copycat") || o.stats.shape === "Support") continue;
+      if (Math.abs(o.x - t.x) > 1 || Math.abs(o.y - t.y) > 1) continue;
+      const dps = o.stats.dmg / o.stats.cd;
+      if (dps > bestDps) { bestDps = dps; best = o; }
+    }
+    t.copying = best;
+    t.stats = towerStats(best ? best.tags.concat("Copycat") : t.tags);
+  }
+}
+
+// Support auras switched off by a nearby Jammer enemy.
+const NO_AURA = { dmg: 1, rate: 1, range: 0, imbue: [] };
+const auraOf = (tower) => (tower.jammed ? NO_AURA : tower.aura);
+
 /** Reach of a tower in cells, including Reach auras and combo range. */
-export const towerRange = (tower) => tower.stats.range + tower.aura.range + tower.combo.range;
+export const towerRange = (tower) => tower.stats.range + auraOf(tower).range + tower.combo.range;
 
 // ------------------------------------------------------------------------------------
 // COMBOS
@@ -507,14 +579,22 @@ export async function startWave() {
     }
     packs.forEach((pack) => {
       const used = new Set();
-      for (let k = 0; k < size; k++) {
-        const drawing = pickDrawing(pack, [], used);   // 5 different drawings of the same subject
+      // Swarm: the group arrives as many tiny copies instead of a handful
+      const swarm = pack.subject.enemyTags.includes("Swarm");
+      const count = swarm ? size * CONFIG.enemyX.swarmFactor : size;
+      for (let k = 0; k < count; k++) {
+        const drawing = pickDrawing(pack, [], used.size >= pack.count ? null : used);   // different drawings of the same subject
         used.add(drawing);
-        plan.push({ at: t, pack, drawing, first: k === 0, size });
-        t += W.spawnInterval;
+        plan.push({ at: t, pack, drawing, first: k === 0, size: count, swarm });
+        t += swarm ? W.spawnInterval / CONFIG.enemyX.swarmFactor : W.spawnInterval;
       }
       t += W.groupGap;
     });
+    // Digger enemies are drawn as a pile of dirt while underground
+    if (subjects.some((s) => s.enemyTags.includes("Digger")) && !state.digPack) {
+      const dirt = db.byName.get(CONFIG.look.diggerSprite.subject);
+      if (dirt) state.digPack = await loadPack(dirt);
+    }
     if (bossPack) plan.push({ at: t + 1, pack: bossPack, drawing: pickDrawing(bossPack), first: true, size: 1, boss: true });
   } finally {
     state.loadingWave = false;
@@ -550,6 +630,7 @@ export async function startWave() {
 
 function enemyFromTags(pack, drawing, tags, hpScale, speedScale) {
   const has = (t) => tags.includes(t);
+  const X = CONFIG.enemyX;
   let hp = E.baseHp * hpScale;
   let speed = E.baseSpeed * speedScale;
   let size = E.size;
@@ -558,43 +639,64 @@ function enemyFromTags(pack, drawing, tags, hpScale, speedScale) {
   if (has("Tanky")) { hp *= E.tankyHp; size *= 1.2; }
   if (has("Frail")) { hp *= E.frailHp; size *= 0.85; }
   if (has("Flying")) { hp *= E.flyingHp; speed *= E.flyingSpeed; }
-  const flying = has("Flying");
+  if (has("Pinata")) { hp *= X.pinataHp; speed *= X.pinataSpeed; }
+  if (has("Decoy")) hp *= X.decoyHp;
+  if (has("Transport")) speed *= X.transportSpeed;
+  if (has("Cocoon")) speed *= X.cocoonSpeed;
+  const flying = has("Flying") || has("Glide");
   return {
     id: state.nextId++, pack, drawing, name: pack.subject.name, tags,
     kinds: tags.filter((t) => KINDS.includes(t)),
-    maxHp: hp, hp, speed, size,
+    maxHp: hp, hp, speed, baseSpeed: speed, size, baseSize: size,
     maxShield: has("Shielded") ? hp * E.shieldShare : 0, shield: has("Shielded") ? hp * E.shieldShare : 0,
-    flying, armored: has("Armored"), regen: has("Regen"), healer: has("Healer"), splitter: has("Splitter"),
+    flying, armored: has("Armored") || has("Cocoon"), regen: has("Regen"), healer: has("Healer"), splitter: has("Splitter"),
     unstoppable: has("Unstoppable"), stealth: has("Stealth"), rich: has("Rich"), dodgy: has("Dodgy"),
     explosive: has("Explosive"),
+    // special enemy tags (CONFIG.enemyX)
+    dash: has("Dash"), jump: has("Jump"), scary: has("Scary"), digger: has("Digger"), glide: has("Glide"),
+    rally: has("Rally"), transport: has("Transport"), thief: has("Thief"), jammer: has("Jammer"), decoy: has("Decoy"),
+    enrage: has("Enrage"), undying: has("Undying"), cleanse: has("Cleanse"), spiky: has("Spiky"), growing: has("Growing"),
+    summoner: has("Summoner"), eggLayer: has("Egg Layer"), cocoon: has("Cocoon"), blink: has("Blink"), pinata: has("Pinata"),
     path: flying ? state.flyPath : state.groundPath, d: 0, x: 0, y: 0,
     lastHit: -99, slowUntil: 0, slowFactor: 1, stunUntil: 0, curseUntil: 0, rootImmuneUntil: 0, kbImmuneUntil: 0,
-    burn: null, poison: null, bleed: null, shredded: false,
+    markUntil: 0, sleepUntil: 0, sleepImmuneUntil: 0, confuseUntil: 0, confuseImmuneUntil: 0, digUntil: 0,
+    dashNext: X.dashEvery, dashUntil: 0, cleanseNext: X.cleanseEvery, summonNext: X.summonEvery, summoned: 0,
+    eggNext: X.eggEvery, blinkReady: 0, hatched: false, revived: false, rallied: false, underground: false,
+    burn: null, poison: null, bleed: null, shredded: false, spinHits: {},
     healTimer: E.healerEvery, flashUntil: 0, dotAcc: 0, dotTimer: 0, dotColor: "#fff",
-    lastTower: null, child: false, boss: false, dead: false,
+    lastTower: null, lastHitAmount: 0, child: false, boss: false, dead: false,
   };
 }
 
 function spawnEnemy(entry) {
   const W = CONFIG.waves;
+  const X = CONFIG.enemyX;
   const caption = entry.pack.captions[entry.drawing];
   let tags = enemyTagsFor(entry.pack.subject, caption);
   // Flying things skip the whole maze and few towers can reach them, so they are never also Tanky or Armored.
   if (tags.includes("Flying")) tags = tags.filter((t) => t !== "Tanky" && t !== "Armored");
   // Tanky enemies never heal each other (Healer): a group of them is too hard to wear down. Regen is fine.
   if (tags.includes("Tanky")) tags = tags.filter((t) => t !== "Healer");
-  if (entry.boss) tags = tags.filter((t) => t !== "Frail");
+  if (entry.boss) tags = tags.filter((t) => !["Frail", "Swarm", "Decoy", "Pinata", "Transport"].includes(t));
   const hpScale = Math.pow(W.hpGrowth, state.wave - 1) * (entry.boss ? CONFIG.boss.hp : 1);
   const speedScale = Math.min(W.maxSpeedGrowth, Math.pow(W.speedGrowth, state.wave - 1));
   const enemy = enemyFromTags(entry.pack, entry.drawing, tags, hpScale, speedScale);
   if (entry.boss) {
     enemy.boss = true;
     enemy.size *= CONFIG.boss.size;
+    enemy.baseSize = enemy.size;
     enemy.tags = ["Boss", ...tags];
     sfx.boss();
   }
+  if (entry.swarm) {                                  // one of many tiny swarm copies
+    enemy.maxHp = enemy.hp *= X.swarmHp;
+    enemy.maxShield = enemy.shield *= X.swarmHp;
+    enemy.size *= X.swarmSize; enemy.baseSize = enemy.size;
+  }
+  if (enemy.digger) { enemy.digUntil = state.time + X.diggerTime; enemy.underground = true; enemy.digSprite = Math.floor(Math.random() * 1e6); }
   // walkers take the routes in turn, so a split route gets half the enemies each
-  if (!enemy.flying) enemy.path = state.groundPaths[state.routeTurn++ % state.groundPaths.length];
+  enemy.route = state.routeTurn++ % state.groundPaths.length;
+  if (!enemy.flying) enemy.path = enemy.jump && state.jumpPath ? state.jumpPath : state.groundPaths[enemy.route];
   const p = pathPoint(enemy.path, 0);
   enemy.x = p.x; enemy.y = p.y;
   state.enemies.push(enemy);
@@ -603,9 +705,30 @@ function spawnEnemy(entry) {
   }
 }
 
+/** Make a smaller enemy of the same kind next to a parent (Summoner minions, eggs, Transport cargo). */
+function spawnChild(parent, opts) {
+  const tags = parent.tags.filter((t) => !["Boss", "Summoner", "Egg Layer", "Transport", "Splitter", "Tanky", "Swarm", "Cocoon", "Undying", "Pinata", "Rally"].includes(t));
+  const child = enemyFromTags(parent.pack, parent.drawing, tags, 1, 1);
+  child.maxHp = child.hp = parent.maxHp * opts.hp;
+  child.maxShield = child.shield = 0;
+  child.speed = child.baseSpeed = parent.baseSpeed * (opts.speed ?? 1);
+  child.size = child.baseSize = parent.baseSize * (opts.size ?? 0.6);
+  child.flying = parent.flying && !parent.glide;
+  child.path = parent.path;
+  child.d = Math.max(0, parent.d - (opts.behind ?? 0.3));
+  child.child = true;
+  const p = pathPoint(child.path, child.d);
+  child.x = p.x; child.y = p.y;
+  state.enemies.push(child);
+  return child;
+}
+
 function endWave() {
+  const broken = [];
   for (const tower of state.towers) {
     tower.wavesAlive++;
+    tower.warm = 0; tower.warmTime = 0;                      // Warm-up starts cold every wave
+    if (tower.stats.glass && tower.wavesAlive >= CONFIG.special.glassWaves) broken.push(tower);
     if (tower.stats.shape !== "Support") continue;
     if (tower.stats.gold) {
       state.gold += CONFIG.run.goldSupportPerWave;
@@ -616,6 +739,13 @@ function endWave() {
       floatText(tower.x, tower.y - 0.3, "+1 heart", "#e11d48");
     }
   }
+  for (const tower of broken) {                                // Glass Cannon: breaks after a few waves, no refund
+    state.towers.splice(state.towers.indexOf(tower), 1);
+    state.towerAt.delete(cellIndex(tower.x, tower.y));
+    floatText(tower.x, tower.y - 0.2, "SHATTERED", "#94a3b8", 1);
+    burst(tower.x, tower.y, 16, ["#e0f2fe", "#94a3b8", "#ffffff"]);
+  }
+  if (broken.length) { refreshAuras(); sfx.erase(); }
   state.shots.length = 0;
   // celebrate: big banner, confetti, jingle. A wave with no leaks gets the fancier jingle.
   const w = state.waveStart || { kills: state.kills, gold: state.gold, hearts: state.hearts };
@@ -639,9 +769,11 @@ export function step(dt) {
   if (state.phase !== "wave") return;
 
   while (state.spawnQueue.length && state.spawnQueue[0].at <= state.time) spawnEnemy(state.spawnQueue.shift());
+  updateAuras();
   for (const enemy of state.enemies) updateEnemy(enemy, dt);
   for (const tower of state.towers) updateTower(tower, dt);
   updateShots(dt);
+  updateMines();
   state.enemies = state.enemies.filter((e) => !e.dead);
 
   if (state.hearts <= 0) {
@@ -652,8 +784,23 @@ export function step(dt) {
   }
 }
 
+/** Enemy effects that reach out to others every frame: Scary and Jammer on towers, Rally on enemies. */
+function updateAuras() {
+  const X = CONFIG.enemyX;
+  const scary = state.enemies.filter((e) => e.scary && !e.dead);
+  const jammers = state.enemies.filter((e) => e.jammer && !e.dead);
+  const rallies = state.enemies.filter((e) => e.rally && !e.dead);
+  for (const t of state.towers) {
+    t.scared = scary.some((e) => Math.hypot(e.x - t.x, e.y - t.y) <= X.scaryRange);
+    t.jammed = jammers.some((e) => Math.hypot(e.x - t.x, e.y - t.y) <= X.jammerRange);
+  }
+  for (const e of state.enemies) e.rallied = rallies.some((r) => r !== e && Math.hypot(r.x - e.x, r.y - e.y) <= X.rallyRange);
+}
+
 function updateEnemy(e, dt) {
   const now = state.time;
+  const X = CONFIG.enemyX;
+  if (e.egg) { updateEgg(e); return; }
   // damage over time
   let dot = 0;
   for (const key of ["burn", "poison", "bleed"]) {
@@ -692,52 +839,138 @@ function updateEnemy(e, dt) {
       if (healed) state.fx.push({ kind: "ring", x: e.x, y: e.y, r: E.healerRange, color: "#22c55e", life: 0.4, max: 0.4 });
     }
   }
+  // special enemy behaviours
+  e.underground = e.digger && now < e.digUntil;
+  if (e.underground && Math.random() < dt * 12) state.fx.push({ kind: "dirt", x: e.x + (Math.random() - 0.5) * 0.3, y: e.y + 0.2, life: 0.7, max: 0.7 });
+  if (e.growing && e.size < e.baseSize * X.growMaxSize) {
+    const g = e.maxHp * X.growPerSec * dt;
+    e.maxHp += g; e.hp += g;
+    e.size = Math.min(e.baseSize * X.growMaxSize, e.size * (1 + X.growPerSec * dt * 0.5));
+  }
+  if (e.cleanse && now >= e.cleanseNext) {
+    e.cleanseNext = now + X.cleanseEvery;
+    const had = e.burn || e.poison || e.bleed || now < e.slowUntil || now < e.curseUntil || now < e.markUntil || now < e.sleepUntil || now < e.confuseUntil;
+    e.burn = e.poison = e.bleed = null;
+    e.slowUntil = e.curseUntil = e.markUntil = e.sleepUntil = e.confuseUntil = 0;
+    if (!e.boss) e.stunUntil = Math.min(e.stunUntil, now);
+    if (had) state.fx.push({ kind: "ring", x: e.x, y: e.y, r: 0.6, color: "#e0f2fe", life: 0.35, max: 0.35 });
+  }
+  if (e.summoner && now >= e.summonNext) {
+    e.summonNext = now + X.summonEvery;
+    if (e.summoned < X.summonMax) { e.summoned++; spawnChild(e, { hp: X.summonHp, size: 0.6 }); state.fx.push({ kind: "ring", x: e.x, y: e.y, r: 0.7, color: "#7c3aed", life: 0.35, max: 0.35 }); }
+  }
+  if (e.eggLayer && !e.flying && now >= e.eggNext) {
+    e.eggNext = now + X.eggEvery;
+    const egg = spawnChild(e, { hp: X.eggHp * 0.5, size: 0.45, behind: 0.05 });
+    egg.egg = true; egg.hatchAt = now + X.eggHatch; egg.speed = 0;
+  }
+  if (e.cocoon && !e.hatched && e.d >= e.path.len / 2) {            // hatch into a fast flyer
+    e.hatched = true; e.armored = false; e.flying = true;
+    e.speed = e.baseSpeed / X.cocoonSpeed * X.cocoonHatchSpeed;
+    e.path = makePath([{ x: e.x, y: e.y }, { x: B.home.x, y: B.home.y }]); e.d = 0;
+    burst(e.x, e.y, 12, ["#facc15", "#a3e635", "#ffffff"]);
+    floatText(e.x, e.y - 0.4, "HATCHED", "#65a30d", 0.8);
+  }
+  if (e.glide && e.flying && e.y >= B.rows / 2) landGlider(e);
+  if (e.dash && now >= e.dashNext) { e.dashNext = now + X.dashEvery; e.dashUntil = now + X.dashTime; }
   // movement
-  if (now < e.stunUntil) return;
-  const speed = e.speed * (now < e.slowUntil ? e.slowFactor : 1);
-  e.d += speed * dt;
+  if (now < e.stunUntil || now < e.sleepUntil) return;
+  let speed = e.speed * (now < e.slowUntil ? e.slowFactor : 1);
+  if (now < e.dashUntil) speed *= X.dashSpeed;
+  if (e.rallied) speed *= X.rallySpeed;
+  if (e.enrage) speed *= 1 + X.enrageSpeed * (1 - Math.max(0, e.hp / e.maxHp));
+  const dir = now < e.confuseUntil ? -1 : 1;                       // Confuse: walks backwards
+  e.d = Math.max(0, e.d + speed * dt * dir);
   const p = pathPoint(e.path, e.d);
   e.x = p.x; e.y = p.y;
+  e.onBlock = !e.flying && inBoard(Math.round(e.x), Math.round(e.y)) && !!state.blocks[cellIndex(Math.round(e.x), Math.round(e.y))];
   if (e.d >= e.path.len) {
     e.dead = true;
     const cost = e.boss ? CONFIG.boss.leakHearts : 1;
     state.hearts -= cost;
     floatText(B.home.x, B.home.y - 0.4, `-${cost}`, "#e11d48", 1.2);
+    if (e.thief && state.gold > 0) {                                 // Thief: steals gold too
+      const stolen = Math.min(state.gold, Math.round(X.thiefBase + X.thiefPerWave * (state.wave - 1)));
+      state.gold -= stolen;
+      floatText(B.home.x, B.home.y - 0.9, `-${stolen} gold`, "#ca8a04", 1);
+    }
     sfx.leak();
   }
+}
+
+/** Eggs sit still, then hatch into a small copy of their parent unless destroyed first. */
+function updateEgg(e) {
+  if (state.time < e.hatchAt) return;
+  e.egg = false;
+  e.speed = e.baseSpeed;
+  e.maxHp = e.hp = e.maxHp * 2;
+  e.size = e.baseSize = e.baseSize * 1.2;
+  burst(e.x, e.y, 8, ["#fef3c7", "#ffffff"]);
+}
+
+/** Glide: lands on the nearest square of its walking route, halfway down the board. */
+function landGlider(e) {
+  const path = state.groundPaths[e.route] || state.groundPath;
+  let best = 0, bestD = Infinity;
+  path.pts.forEach((pt, i) => {
+    const d = Math.hypot(pt.x - e.x, pt.y - e.y);
+    if (d < bestD && pt.y >= B.rows / 2 - 1) { bestD = d; best = i; }
+  });
+  e.flying = false;
+  e.path = path; e.d = path.cum[best];
+  const p = pathPoint(path, e.d);
+  e.x = p.x; e.y = p.y;
+  state.fx.push({ kind: "ring", x: e.x, y: e.y, r: 0.5, color: "#94a3b8", life: 0.3, max: 0.3 });
 }
 
 // Can this tower affect this enemy at all? (Flying needs Anti-Air or Sonic, Stealth needs to be close.)
 function canAffect(tower, e, dist) {
   if (e.dead) return false;
+  if (e.underground && !tower.stats.area) return false;           // Digger: only area attacks reach it
   if (e.flying && !tower.stats.antiAir && !tower.combo.antiAir) return false;
+  if (!e.flying && tower.stats.airOnly) return false;              // Anti-Air: flyers only
   if (e.stealth && !tower.stats.holy && dist > E.stealthReveal) return false;
   return true;
 }
 
 function enemiesInRange(tower, range) {
   const list = [];
+  const min = tower.stats.shape === "Artillery" ? T.shapes.Artillery.minRange : 0;
   for (const e of state.enemies) {
+    if (e.egg && tower.stats.airOnly) continue;
     const dist = Math.hypot(e.x - tower.x, e.y - tower.y);
-    if (dist <= range && e.y > -0.6 && canAffect(tower, e, dist)) list.push(e);
+    if (dist <= range && dist >= min && e.y > -0.6 && canAffect(tower, e, dist)) list.push(e);
   }
   return list;
 }
 
 // Target the enemy closest to getting home.
+const SUPPORT_ENEMY = (e) => e.healer || e.rally || e.summoner || e.jammer || e.scary || e.eggLayer;
+const leftOf = (e) => e.path.len - e.d;
+
+/**
+ * Choose a target. Normally the enemy closest to getting home, but Decoys pull towers without a
+ * targeting tag. Assassin: lowest health. Giant Slayer: highest health. Tactical: support enemies first.
+ */
 function pickTarget(tower) {
-  let best = null, bestLeft = Infinity;
-  for (const e of enemiesInRange(tower, towerRange(tower))) {
-    const left = e.path.len - e.d;
-    if (left < bestLeft) { bestLeft = left; best = e; }
-  }
-  return best;
+  let list = enemiesInRange(tower, towerRange(tower));
+  if (!list.length) return null;
+  const hpOf = (e) => e.hp + e.shield;
+  const mode = tower.stats.targeting;
+  if (mode === "assassin") return list.reduce((a, b) => (hpOf(b) < hpOf(a) ? b : a));
+  if (mode === "giant") return list.reduce((a, b) => (hpOf(b) > hpOf(a) ? b : a));
+  if (mode === "tactical") { const sup = list.filter(SUPPORT_ENEMY); if (sup.length) list = sup; }
+  else { const decoys = list.filter((e) => e.decoy); if (decoys.length) list = decoys; }
+  return list.reduce((a, b) => (leftOf(b) < leftOf(a) ? b : a));
 }
 
 function updateTower(tower, dt) {
   const s = tower.stats;
+  const X = CONFIG.special;
+  const now = state.time;
   tower.recoil = Math.max(0, tower.recoil - dt * 5);
-  if (state.time < tower.stunUntil) { tower.beamTarget = null; return; }
+  if (now < tower.stunUntil) { tower.beamTarget = null; tower.linkTargets = null; return; }
+  const rate = auraOf(tower).rate * tower.combo.rate * (tower.scared ? CONFIG.enemyX.scaryRate : 1) * (1 + (tower.warm || 0));
 
   if (s.shape === "Support") {
     // Support + Slow is a slowing field. Everything else a Support does is an aura or end-of-wave effect.
@@ -745,40 +978,101 @@ function updateTower(tower, dt) {
     return;
   }
 
-  if (s.shape === "Beam") {
+  // timers for the "every N seconds" specials
+  if (s.timewarp) tower.warpT = Math.max(0, (tower.warpT ?? 0) - dt);
+  if (s.tasty) tower.tastyT = Math.max(0, (tower.tastyT ?? 0) - dt);
+  if (s.freezeFrame) {
+    tower.freezeT = (tower.freezeT ?? X.freezeEvery) - dt;
+    if (tower.freezeT <= 0) {
+      const caught = enemiesInRange(tower, towerRange(tower));
+      if (caught.length) {
+        tower.freezeT = X.freezeEvery;
+        for (const e of caught) stunEnemy(e, X.freezeTime);
+        state.fx.push({ kind: "ring", x: tower.x, y: tower.y, r: towerRange(tower), color: "#ffffff", life: 0.4, max: 0.4 });
+        sfx.freeze();
+      } else tower.freezeT = 0;
+    }
+  }
+  if (s.mineLayer) {
+    tower.mineT = (tower.mineT ?? 0) - dt;
+    if (tower.mineT <= 0) { tower.mineT = X.mineEvery; layMine(tower); }
+  }
+  // queued follow-up attacks (Burst shots, Echo repeats)
+  if (tower.queue && tower.queue.length) {
+    for (const q of tower.queue) {
+      if (now < q.at) continue;
+      q.done = true;
+      const target = q.target && !q.target.dead && canAffect(tower, q.target, 0) ? q.target : pickTarget(tower);
+      if (target) { attack(tower, target, q.mult, false); if (q.echo) state.fx.push({ kind: "ring", x: tower.x, y: tower.y, r: 0.55, color: s.color, life: 0.25, max: 0.25 }); }
+    }
+    tower.queue = tower.queue.filter((q) => !q.done);
+  }
+
+  if (s.shape === "Beam" || s.shape === "Link") {
     const target = pickTarget(tower);
-    if (!target) { tower.beamTarget = null; tower.beamRamp = 1; return; }
+    if (!target) { tower.beamTarget = null; tower.linkTargets = null; tower.beamRamp = 1; return; }
     if (target !== tower.beamTarget) { tower.beamTarget = target; tower.beamRamp = 1; }
     const sh = T.shapes.Beam;
-    tower.beamRamp = Math.min(sh.rampMax, tower.beamRamp + sh.rampPerSec * dt);
-    tower.beamAcc += dt * tower.aura.rate * tower.combo.rate;
+    tower.beamRamp = s.shape === "Beam" ? Math.min(sh.rampMax, tower.beamRamp + sh.rampPerSec * dt) : 1;
+    tower.beamAcc += dt * rate;
+    if (s.shape === "Link") {
+      const L = T.shapes.Link;
+      tower.linkTargets = state.enemies
+        .filter((e) => e !== target && canAffect(tower, e, 0) && Math.hypot(e.x - target.x, e.y - target.y) <= L.branchRange)
+        .sort((a, b) => Math.hypot(a.x - target.x, a.y - target.y) - Math.hypot(b.x - target.x, b.y - target.y))
+        .slice(0, L.branches);
+    }
     if (tower.beamAcc >= 0.25) {
       tower.beamAcc -= 0.25;
-      applyHit(tower, target, (s.dmg / s.cd) * 0.25 * tower.beamRamp, { sure: true });
+      const tick = (s.dmg / s.cd) * 0.25 * tower.beamRamp;
+      applyHit(tower, target, tick, { sure: true });
+      if (tower.linkTargets) for (const b of tower.linkTargets) applyHit(tower, b, tick * T.shapes.Link.branchShare, { sure: true });
       sfx.shoot(s.elems[0]);
     }
     return;
   }
 
-  tower.cd -= dt * tower.aura.rate * tower.combo.rate;
+  if (s.shape === "Spin") { updateSpin(tower, dt, rate); return; }
+
+  tower.cd -= dt * rate;
   if (tower.cd > 0) return;
   const target = pickTarget(tower);
   if (!target) { tower.cd = 0; return; }
   tower.cd = s.cd;
   tower.recoil = 1;
   sfx.shoot(s.elems[0]);
+  if (s.warmup) {                                     // Warm-up: faster the longer it keeps firing this wave
+    tower.warmTime = (tower.warmTime || 0) + s.cd / rate;
+    tower.warm = Math.min(1, tower.warmTime / X.warmupTime) * X.warmupMax;
+  }
+  tower.attacks = (tower.attacks || 0) + 1;
+  const big = s.monstrous && tower.attacks % X.monstrousEvery === 0;   // Monstrous: every 10th attack is huge
+  attack(tower, target, big ? X.monstrousDamage : 1, big);
+  if (s.burst) {
+    tower.queue = tower.queue || [];
+    for (let k = 1; k < X.burstShots; k++) tower.queue.push({ at: now + k * X.burstGap, target, mult: 1 });
+  }
+  if (s.echo) {
+    tower.queue = tower.queue || [];
+    tower.queue.push({ at: now + X.echoDelay, target, mult: X.echoDamage, echo: true });
+  }
+}
 
+/** One attack of a tower's shape at a target. `mult` scales its damage; `big` makes a Monstrous shot. */
+function attack(tower, target, mult, big) {
+  const s = tower.stats;
+  const dmg = s.dmg * mult;
   if (s.shape === "Pulse") {
     const range = towerRange(tower);
-    for (const e of enemiesInRange(tower, range)) applyHit(tower, e, s.dmg, { sure: true });
+    for (const e of enemiesInRange(tower, range)) applyHit(tower, e, dmg, { sure: true });
     state.fx.push({ kind: "ring", x: tower.x, y: tower.y, r: range, color: s.color, life: 0.3, max: 0.3 });
   } else if (s.shape === "Chain") {
     const sh = T.shapes.Chain;
     const hit = [target];
-    let from = { x: tower.x, y: tower.y }, cur = target, dmg = s.dmg;
+    let from = { x: tower.x, y: tower.y }, cur = target, d = dmg;
     for (let j = 0; ; j++) {
       state.fx.push({ kind: "zap", x1: from.x, y1: from.y, x2: cur.x, y2: cur.y, color: s.color, life: 0.18, max: 0.18 });
-      applyHit(tower, cur, dmg, { sure: j > 0 });
+      applyHit(tower, cur, d, { sure: j > 0 });
       if (j >= sh.jumps) break;
       let next = null, nd = sh.jumpRange;
       for (const e of state.enemies) {
@@ -788,23 +1082,92 @@ function updateTower(tower, dt) {
       }
       if (!next) break;
       from = { x: cur.x, y: cur.y };
-      cur = next; hit.push(next); dmg *= sh.falloff;
+      cur = next; hit.push(next); d *= sh.falloff;
     }
-  } else if (s.shape === "Pierce") {
-    const dist = Math.hypot(target.x - tower.x, target.y - tower.y) || 1;
-    state.shots.push({
-      kind: "pierce", tower, x: tower.x, y: tower.y,
-      vx: ((target.x - tower.x) / dist) * T.pierceSpeed, vy: ((target.y - tower.y) / dist) * T.pierceSpeed,
-      left: towerRange(tower) + 1, hit: new Set(), color: s.color,
-    });
+  } else if (s.shape === "Pierce" || s.shape === "Spread") {
+    const base = Math.atan2(target.y - tower.y, target.x - tower.x);
+    const n = s.shape === "Spread" ? T.shapes.Spread.pellets : 1;
+    for (let k = 0; k < n; k++) {
+      const a = n === 1 ? base : base + (k / (n - 1) - 0.5) * T.shapes.Spread.cone * 2;
+      state.shots.push({
+        kind: s.shape === "Spread" ? "pellet" : "pierce", tower, dmg, big, x: tower.x, y: tower.y,
+        vx: Math.cos(a) * T.pierceSpeed, vy: Math.sin(a) * T.pierceSpeed,
+        left: towerRange(tower) + (s.shape === "Spread" ? 0.3 : 1), hit: new Set(), color: s.color,
+      });
+    }
+  } else if (s.shape === "Boomerang") {
+    state.shots.push({ kind: "boomerang", tower, dmg, big, x: tower.x, y: tower.y, tx: target.x, ty: target.y, back: false, hit: new Set(), color: s.color, spin: 0 });
+  } else if (s.shape === "Artillery") {
+    const A = T.shapes.Artillery;
+    state.shots.push({ kind: "artillery", tower, dmg, big, sx: tower.x, sy: tower.y, x: tower.x, y: tower.y, tx: target.x, ty: target.y, t: 0, flight: A.flight, color: s.color });
+  } else if (s.shape === "Sweep") {
+    // the whole row or column through the tower, whichever holds the target (or more enemies)
+    const row = state.enemies.filter((e) => Math.abs(e.y - tower.y) < 0.5 && canAffect(tower, e, 0));
+    const col = state.enemies.filter((e) => Math.abs(e.x - tower.x) < 0.5 && canAffect(tower, e, 0));
+    const useRow = row.includes(target) || (!col.includes(target) && row.length >= col.length);
+    for (const e of useRow ? row : col) applyHit(tower, e, dmg, { sure: true });
+    state.fx.push({ kind: "sweep", row: useRow, at: useRow ? tower.y : tower.x, color: s.color, life: 0.3, max: 0.3 });
   } else {
-    state.shots.push({ kind: s.shape === "Splash" ? "splash" : "single", tower, x: tower.x, y: tower.y, target, tx: target.x, ty: target.y, color: s.color });
+    state.shots.push({ kind: s.shape === "Splash" ? "splash" : s.shape === "Ricochet" ? "ricochet" : "single", tower, dmg, big, x: tower.x, y: tower.y, target, tx: target.x, ty: target.y, color: s.color, bounced: false });
   }
+}
+
+/** Spin: blades orbit the tower and hit whatever they touch (each enemy at most every half second). */
+function updateSpin(tower, dt, rate) {
+  const S = T.shapes.Spin;
+  const now = state.time;
+  tower.spinAngle = ((tower.spinAngle || 0) + dt * Math.PI * 2 * S.turnsPerSec * rate) % (Math.PI * 2);
+  for (let b = 0; b < S.blades; b++) {
+    const a = tower.spinAngle + (b / S.blades) * Math.PI * 2;
+    const bx = tower.x + Math.cos(a) * S.radius, by = tower.y + Math.sin(a) * S.radius;
+    for (const e of state.enemies) {
+      if (!canAffect(tower, e, 0)) continue;
+      if (Math.hypot(e.x - bx, e.y - by) > 0.3 + e.size * 0.3) continue;
+      if (now < (e.spinHits[tower.id] ?? -9) + S.hitEvery) continue;
+      e.spinHits[tower.id] = now;
+      applyHit(tower, e, tower.stats.dmg, {});
+      tower.recoil = 0.5;
+    }
+  }
+}
+
+/** Mine Layer: drop a mine on a random walking-route square in range (a few at most per tower). */
+function layMine(tower) {
+  const X = CONFIG.special;
+  state.mines = state.mines || [];
+  if (state.mines.filter((m) => m.tower === tower).length >= X.mineMax) return;
+  const spots = [];
+  for (const path of state.groundPaths) for (const pt of path.pts) {
+    if (pt.y < 0 || Math.hypot(pt.x - tower.x, pt.y - tower.y) > towerRange(tower)) continue;
+    if (!state.mines.some((m) => m.x === pt.x && m.y === pt.y)) spots.push(pt);
+  }
+  if (!spots.length) return;
+  const pt = spots[Math.floor(Math.random() * spots.length)];
+  state.mines.push({ x: pt.x, y: pt.y, tower });
+}
+
+function updateMines() {
+  if (!state.mines || !state.mines.length) return;
+  const X = CONFIG.special;
+  for (const m of state.mines) {
+    if (!state.towers.includes(m.tower)) { m.gone = true; continue; }
+    const hit = state.enemies.find((e) => !e.dead && !e.flying && Math.hypot(e.x - m.x, e.y - m.y) <= X.mineTrigger);
+    if (!hit) continue;
+    m.gone = true;
+    for (const e of state.enemies) {
+      if (!e.dead && !e.flying && Math.hypot(e.x - m.x, e.y - m.y) <= X.mineRadius) applyHit(m.tower, e, m.tower.stats.dmg * X.mineDamage, { sure: true });
+    }
+    state.fx.push({ kind: "ring", x: m.x, y: m.y, r: X.mineRadius, color: "#f97316", life: 0.35, max: 0.35 });
+    burst(m.x, m.y, 10, ["#f97316", "#facc15", "#1e293b"]);
+    sfx.boom();
+  }
+  state.mines = state.mines.filter((m) => !m.gone);
 }
 
 function updateShots(dt) {
   for (const shot of state.shots) {
-    if (shot.kind === "pierce") {
+    const s = shot.tower.stats;
+    if (shot.kind === "pierce" || shot.kind === "pellet") {
       const move = T.pierceSpeed * dt;
       shot.x += shot.vx * dt; shot.y += shot.vy * dt;
       shot.left -= move;
@@ -812,10 +1175,37 @@ function updateShots(dt) {
         if (shot.hit.has(e) || !canAffect(shot.tower, e, 0)) continue;
         if (Math.hypot(e.x - shot.x, e.y - shot.y) <= T.shapes.Pierce.width + e.size * 0.25) {
           shot.hit.add(e);
-          applyHit(shot.tower, e, shot.tower.stats.dmg, {});
+          applyHit(shot.tower, e, shot.dmg, {});
+          if (shot.kind === "pellet") { shot.done = true; break; }     // a pellet stops at its first enemy
         }
       }
       if (shot.left <= 0) shot.done = true;
+      continue;
+    }
+    if (shot.kind === "boomerang") {
+      shot.spin += dt * 18;
+      const gx = shot.back ? shot.tower.x : shot.tx, gy = shot.back ? shot.tower.y : shot.ty;
+      const dx = gx - shot.x, dy = gy - shot.y, dist = Math.hypot(dx, dy), move = T.projectileSpeed * 0.8 * dt;
+      if (dist > move) { shot.x += (dx / dist) * move; shot.y += (dy / dist) * move; }
+      else if (!shot.back) { shot.back = true; shot.hit = new Set(); }            // turn round, can hit everything again
+      else { shot.done = true; continue; }
+      for (const e of state.enemies) {
+        if (shot.hit.has(e) || !canAffect(shot.tower, e, 0)) continue;
+        if (Math.hypot(e.x - shot.x, e.y - shot.y) <= 0.35 + e.size * 0.25) { shot.hit.add(e); applyHit(shot.tower, e, shot.dmg, {}); }
+      }
+      continue;
+    }
+    if (shot.kind === "artillery") {
+      shot.t += dt;
+      const k = Math.min(1, shot.t / shot.flight);
+      shot.x = shot.sx + (shot.tx - shot.sx) * k; shot.y = shot.sy + (shot.ty - shot.sy) * k;
+      shot.lift = Math.sin(k * Math.PI) * 1.2;                                 // drawn as an arc
+      if (k < 1) continue;
+      shot.done = true;
+      const r = T.shapes.Artillery.radius;
+      state.fx.push({ kind: "ring", x: shot.tx, y: shot.ty, r, color: shot.color, life: 0.3, max: 0.3 });
+      for (const e of state.enemies) if (Math.hypot(e.x - shot.tx, e.y - shot.ty) <= r && canAffect(shot.tower, e, 0)) applyHit(shot.tower, e, shot.dmg, { sure: true });
+      sfx.boom();
       continue;
     }
     // homing shots keep chasing a live target, or finish at its last position
@@ -825,15 +1215,25 @@ function updateShots(dt) {
     const move = T.projectileSpeed * dt;
     if (dist > move) { shot.x += (dx / dist) * move; shot.y += (dy / dist) * move; continue; }
     shot.done = true;
-    const s = shot.tower.stats;
     if (shot.kind === "splash") {
-      const r = T.shapes.Splash.radius;
+      const r = T.shapes.Splash.radius * (shot.big ? 1.4 : 1);
       state.fx.push({ kind: "ring", x: shot.tx, y: shot.ty, r, color: shot.color, life: 0.25, max: 0.25 });
       for (const e of state.enemies) {
-        if (Math.hypot(e.x - shot.tx, e.y - shot.ty) <= r && canAffect(shot.tower, e, 0)) applyHit(shot.tower, e, s.dmg, { sure: e !== shot.target });
+        if (Math.hypot(e.x - shot.tx, e.y - shot.ty) <= r && canAffect(shot.tower, e, 0)) applyHit(shot.tower, e, shot.dmg, { sure: e !== shot.target });
       }
     } else if (shot.target && !shot.target.dead) {
-      applyHit(shot.tower, shot.target, s.dmg, {});
+      const victim = shot.target;
+      applyHit(shot.tower, victim, shot.dmg, {});
+      if (shot.kind === "ricochet" && !shot.bounced) {                         // one bounce to the nearest other enemy
+        const R = T.shapes.Ricochet;
+        let next = null, nd = R.bounceRange;
+        for (const e of state.enemies) {
+          if (e === victim || e.dead || !canAffect(shot.tower, e, 0)) continue;
+          const d = Math.hypot(e.x - victim.x, e.y - victim.y);
+          if (d < nd) { nd = d; next = e; }
+        }
+        if (next) state.shots.push({ kind: "ricochet", tower: shot.tower, dmg: shot.dmg * R.bounceShare, x: victim.x, y: victim.y, target: next, tx: next.x, ty: next.y, color: shot.color, bounced: true });
+      }
     }
   }
   state.shots = state.shots.filter((s) => !s.done);
@@ -850,14 +1250,19 @@ function updateShots(dt) {
 function applyHit(tower, e, dmg, opts) {
   if (e.dead) return;
   const s = tower.stats;
+  const X = CONFIG.special;
+  const now = state.time;
   if (e.dodgy && !opts.sure && Math.random() < E.dodgeChance) {
     floatText(e.x, e.y - 0.4, "miss", "#94a3b8", 0.7);
     return;
   }
-  let total = dmg * tower.aura.dmg * tower.combo.dmg;
+  let total = dmg * auraOf(tower).dmg * tower.combo.dmg * (1 + (tower.trophy || 0));
   if (e.flying) total *= tower.combo.flyerDamage;          // Birds combo, stronger version
+  if (e.flying && s.airOnly) total *= X.antiAirDamage;     // Anti-Air
+  if (s.shatter && (now < e.slowUntil || now < e.stunUntil || now < e.sleepUntil)) total *= X.shatterDamage;
+  if (s.targeting === "giant") total += Math.min(e.maxHp * X.giantShare, s.dmg * X.giantCap);   // Giant Slayer
   let crit = false;
-  const critChance = (s.crit ? T.critChance : 0) + tower.combo.crit;
+  const critChance = (s.crit ? T.critChance : 0) + tower.combo.crit + (s.lucky ? X.luckyCrit : 0);
   if (critChance > 0 && Math.random() < critChance) { total *= T.critMultiplier; crit = true; }
   let dealt = 0;
   for (const el of s.elems) {
@@ -866,16 +1271,36 @@ function applyHit(tower, e, dmg, opts) {
     if (el === "Physical" && e.armored && !e.shredded && !tower.combo.pierceArmor) part *= E.armoredPhysical;
     dealt += part;
   }
-  if (state.time < e.curseUntil) dealt *= e.curseMult || CONFIG.elements.Dark.curse;
+  if (now < e.curseUntil) dealt *= e.curseMult || CONFIG.elements.Dark.curse;
+  if (now < e.markUntil) dealt *= X.tastyDamage;            // Tasty mark
   e.lastTower = tower;
   hurt(e, dealt, tower, { color: s.color, crit, ignoreShield: s.holy });
   if (e.dead) return;
+  if (s.execute && !e.egg && e.hp <= e.maxHp * X.executeShare) {      // Execute: finish off the nearly dead
+    floatText(e.x, e.y - 0.5, "EXECUTE", "#dc2626", 0.9);
+    hurt(e, e.hp + e.shield + 1, tower, { silent: true, ignoreShield: true });
+    return;
+  }
   applyStatuses(tower, e, dealt);
+  // Spiky: a Melee tower that hits it is stunned for a moment
+  if (e.spiky && s.rangeTag === "Melee") {
+    tower.stunUntil = Math.max(tower.stunUntil, now + CONFIG.enemyX.spikyStun);
+    tower.spiked = now + CONFIG.enemyX.spikyStun;
+  }
+  // Blink: a big hit makes it teleport forward
+  if (e.blink && now >= e.blinkReady && dealt >= e.maxHp * CONFIG.enemyX.blinkHit) {
+    e.blinkReady = now + CONFIG.enemyX.blinkCooldown;
+    state.fx.push({ kind: "ring", x: e.x, y: e.y, r: 0.45, color: "#c084fc", life: 0.3, max: 0.3 });
+    e.d = Math.min(e.path.len - 0.2, e.d + CONFIG.enemyX.blinkCells);
+    const p = pathPoint(e.path, e.d); e.x = p.x; e.y = p.y;
+    state.fx.push({ kind: "ring", x: e.x, y: e.y, r: 0.45, color: "#c084fc", life: 0.3, max: 0.3 });
+  }
 }
 
 function hurt(e, amount, tower, opts) {
   if (e.dead || amount <= 0) return;
   e.lastHit = state.time;
+  e.lastHitAmount = amount;
   let left = amount;
   if (e.shield > 0 && !opts.ignoreShield) {
     const soak = Math.min(e.shield, left);
@@ -883,21 +1308,34 @@ function hurt(e, amount, tower, opts) {
   }
   e.hp -= left;
   if (!opts.silent) {
+    e.sleepUntil = 0;                                         // any real hit wakes a sleeper
     e.flashUntil = state.time + 0.08;
     if (CONFIG.look.damageNumbers && amount >= 0.5) {
       floatText(e.x + (Math.random() - 0.5) * 0.3, e.y - 0.35, (opts.crit ? "!" : "") + Math.round(amount), opts.color, opts.crit ? 1.25 : 0.9);
     }
     sfx.hit();
   }
-  if (e.hp <= 0) killEnemy(e, tower);
+  if (e.hp <= 0) {
+    if (e.undying && !e.revived) {                            // Undying: gets back up once
+      e.revived = true;
+      e.hp = e.maxHp * CONFIG.enemyX.undyingHp;
+      e.burn = e.poison = e.bleed = null;
+      floatText(e.x, e.y - 0.5, "UNDYING", "#a855f7", 0.9);
+      burst(e.x, e.y, 10, ["#a855f7", "#e9d5ff"]);
+      return;
+    }
+    killEnemy(e, tower);
+  }
 }
 
 function applyStatuses(tower, e, dealt) {
   const s = tower.stats;
   const C = CONFIG.elements;
+  const X = CONFIG.special;
   const now = state.time;
   const m = tower.combo.status;                   // Weather combo: effects last longer
-  const lent = tower.aura.imbue.concat(tower.combo.imbue.filter((el) => !tower.aura.imbue.includes(el)));
+  const lentAura = auraOf(tower).imbue;
+  const lent = lentAura.concat(tower.combo.imbue.filter((el) => !lentAura.includes(el)));
   for (const el of s.elems.concat(lent.filter((el) => !s.elems.includes(el)))) {
     if (el === "Fire" && !e.kinds.includes("Fire")) {
       const dps = (dealt * C.Fire.burnShare) / C.Fire.burnTime;
@@ -930,6 +1368,44 @@ function applyStatuses(tower, e, dealt) {
   }
   if (s.knockback || tower.combo.knockback) pushEnemy(e, T.knockback * tower.combo.knockback2);
   if (s.shred) e.shredded = true;
+  // special tags
+  if (s.timewarp && !tower.warpT) { tower.warpT = X.timewarpEvery; timewarp(e); }
+  if (s.tasty && !tower.tastyT) { tower.tastyT = X.tastyEvery; e.markUntil = now + X.tastyTime * m; }
+  if (s.magnet) pullEnemy(e, tower, X.magnetCells);
+  if (s.sleep && !e.unstoppable && now >= e.sleepImmuneUntil && Math.random() < X.sleepChance) {
+    const t = X.sleepTime * m * (e.boss ? CONFIG.boss.control : 1);
+    e.sleepUntil = now + t; e.sleepImmuneUntil = now + t + X.sleepImmune;
+  }
+  if (s.confuse && !e.unstoppable && !e.flying && now >= e.confuseImmuneUntil && Math.random() < X.confuseChance) {
+    const t = X.confuseTime * m * (e.boss ? CONFIG.boss.control : 1);
+    e.confuseUntil = now + t; e.confuseImmuneUntil = now + t + X.confuseImmune;
+  }
+}
+
+/** Timewarp: the enemy is sent back down the path in a flash. */
+function timewarp(e) {
+  if (e.unstoppable) return;
+  const cells = CONFIG.special.timewarpCells * (e.boss ? CONFIG.boss.control : 1);
+  state.fx.push({ kind: "ring", x: e.x, y: e.y, r: 0.5, color: "#a855f7", life: 0.4, max: 0.4 });
+  e.d = Math.max(0, e.d - cells);
+  const p = pathPoint(e.path, e.d); e.x = p.x; e.y = p.y;
+  state.fx.push({ kind: "ring", x: e.x, y: e.y, r: 0.5, color: "#a855f7", life: 0.4, max: 0.4 });
+  floatText(e.x, e.y - 0.5, "WARP", "#a855f7", 0.8);
+}
+
+/** Magnet: drags the enemy along its path towards the tower (it can pull them forwards or back). */
+function pullEnemy(e, tower, cells) {
+  if (e.unstoppable || state.time < e.kbImmuneUntil) return;
+  if (e.boss) cells *= CONFIG.boss.control;
+  const ahead = pathPoint(e.path, Math.min(e.path.len - 0.05, e.d + cells));
+  const back = pathPoint(e.path, Math.max(0, e.d - cells));
+  const forwards = Math.hypot(ahead.x - tower.x, ahead.y - tower.y) < Math.hypot(back.x - tower.x, back.y - tower.y);
+  const fromX = e.x, fromY = e.y;
+  e.d = Math.min(e.path.len - 0.05, Math.max(0, e.d + (forwards ? cells : -cells)));
+  const p = pathPoint(e.path, e.d); e.x = p.x; e.y = p.y;
+  e.kbImmuneUntil = state.time + T.knockbackCooldown;
+  const len = Math.hypot(e.x - fromX, e.y - fromY);
+  if (len > 0.01) state.fx.push({ kind: "chev", x: e.x, y: e.y, dx: (e.x - fromX) / len, dy: (e.y - fromY) / len, color: "#f472b6", life: 0.45, max: 0.45 });
 }
 
 function slowEnemy(e, factor, seconds) {
@@ -970,39 +1446,48 @@ function pushEnemy(e, cells) {
 function killEnemy(e, tower) {
   e.dead = true;
   const R = CONFIG.run;
+  const X = CONFIG.special;
   let gold = R.killGold + R.killGoldPerWave * (state.wave - 1);
   if (e.rich) gold *= R.richMultiplier;
+  if (e.pinata) gold *= CONFIG.enemyX.pinataGold;
   if (tower && tower.stats.gold) gold *= R.goldTagKillMultiplier;
   if (tower) gold *= tower.combo.gold;                 // Treasure and Townsfolk combos
+  let lucky = false;
+  if (tower && tower.stats.lucky && Math.random() < X.luckyGoldChance) { gold *= X.luckyGold; lucky = true; }
   if (e.child) gold /= 3;
   if (e.boss) gold *= CONFIG.boss.gold;
   gold = Math.max(1, Math.round(gold));
   state.gold += gold;
   state.kills++;
   state.score += Math.round(e.maxHp / 10) + state.wave;
-  if (tower) tower.kills++;
+  if (tower) {
+    tower.kills++;
+    if (tower.stats.trophy) tower.trophy = Math.min(X.trophyMax, (tower.trophy || 0) + X.trophyPerKill);
+  }
   floatText(e.x, e.y - 0.1, `+${gold}`, "#ca8a04", 0.85);
+  if (lucky) floatText(e.x, e.y - 0.55, "LUCKY", "#22c55e", 0.85);
   state.fx.push({ kind: "pop", x: e.x, y: e.y, r: e.size * 0.6, color: "#3b4252", life: 0.25, max: 0.25 });
-  burst(e.x, e.y, e.boss ? 60 : e.rich ? 12 : 5, e.rich || e.boss ? ["#facc15", "#fde68a", "#f43f5e"] : ["#facc15", "#ffffff", "#94a3b8"]);
+  const shiny = e.rich || e.boss || e.pinata || lucky;
+  burst(e.x, e.y, e.boss ? 60 : e.pinata ? 30 : shiny ? 12 : 5, e.pinata ? ["#f43f5e", "#facc15", "#22c55e", "#38bdf8", "#a855f7"] : shiny ? ["#facc15", "#fde68a", "#f43f5e"] : ["#facc15", "#ffffff", "#94a3b8"]);
   if (e.boss) { bigText("BOSS DOWN", `+${gold} gold`, "#f43f5e", 1.8); sfx.bossDown(); }
   sfx.kill();
-  if (e.rich) sfx.coin();
+  if (shiny) sfx.coin();
 
   if (e.splitter) {
-    for (let k = 0; k < E.splitCount; k++) {
-      const tags = e.tags.filter((t) => t !== "Splitter" && t !== "Tanky");
-      const child = enemyFromTags(e.pack, e.drawing, tags, 1, 1);
-      child.maxHp = child.hp = e.maxHp * E.splitHp;
-      child.maxShield = child.shield = 0;
-      child.speed = e.speed * 1.15;
-      child.size = e.size * E.splitSize;
-      child.path = e.path;
-      child.d = Math.max(0, e.d - 0.35 * k);
-      child.child = true;
-      const p = pathPoint(child.path, child.d);
-      child.x = p.x; child.y = p.y;
-      state.enemies.push(child);
+    for (let k = 0; k < E.splitCount; k++) spawnChild(e, { hp: E.splitHp, speed: 1.15, size: E.splitSize, behind: 0.35 * k });
+  }
+  if (e.transport) {                                  // Transport: unloads slower copies of itself
+    const XE = CONFIG.enemyX;
+    for (let k = 0; k < XE.transportSplit; k++) spawnChild(e, { hp: XE.transportChildHp, speed: XE.transportChildSpeed / XE.transportSpeed, size: 0.7, behind: 0.3 * k });
+  }
+  if (tower && tower.stats.explode && e.lastHitAmount > 0) {      // Explode: the victim bursts
+    const dmg = e.lastHitAmount * X.explodeShare;
+    state.fx.push({ kind: "ring", x: e.x, y: e.y, r: X.explodeRadius, color: "#f97316", life: 0.35, max: 0.35 });
+    for (const o of state.enemies) {
+      if (o === e || o.dead) continue;
+      if (Math.hypot(o.x - e.x, o.y - e.y) <= X.explodeRadius && canAffect(tower, o, 0)) hurt(o, dmg, tower, { color: "#f97316" });
     }
+    sfx.boom();
   }
   if (e.explosive) {
     state.fx.push({ kind: "ring", x: e.x, y: e.y, r: E.explodeRange, color: "#f97316", life: 0.4, max: 0.4 });

@@ -36,9 +36,10 @@ export async function loadIndex() {
     const subject = {
       id, name, count,
       words: name.split(" "),
-      towerTags: t ? t.split(" ") : [],
-      enemyTags: e ? e.split(" ") : [],
-      categories: k ? k.split(" ") : [],     // combo categories (see COMBOS in config.js)
+      // stored as arrays (some tags have spaces, e.g. "Giant Slayer"); older files used space-joined strings
+      towerTags: Array.isArray(t) ? t : t ? t.split(" ") : [],
+      enemyTags: Array.isArray(e) ? e : e ? e.split(" ") : [],
+      categories: Array.isArray(k) ? k : k ? k.split(" ") : [],     // combo categories (see COMBOS in config.js)
     };
     db.subjects.push(subject);
     db.byName.set(name, subject);
