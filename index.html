@@ -27,8 +27,16 @@
           </div>
           <div class="stat" id="stat-wave"><span class="lbl">WAVE</span><b id="hud-wave">1</b></div>
           <div class="stat" id="stat-score"><span class="lbl">SCORE</span><b id="hud-score">0</b></div>
+          <!-- sound on / off -->
+          <button type="button" id="btn-sound" class="stat sound" aria-label="Sound on or off" title="Sound">
+            <svg class="ico" viewBox="0 0 8 7" shape-rendering="crispEdges" aria-hidden="true"><g fill="#e2e8f0"><rect x="0" y="2" width="2" height="3"/><rect x="2" y="1" width="1" height="5"/><rect x="3" y="0" width="1" height="7"/></g><g class="waves" fill="#7dd3fc"><rect x="5" y="2" width="1" height="3"/><rect x="7" y="1" width="1" height="5"/></g><g class="cross" fill="#f43f5e"><rect x="5" y="2" width="1" height="1"/><rect x="7" y="2" width="1" height="1"/><rect x="6" y="3" width="1" height="1"/><rect x="5" y="4" width="1" height="1"/><rect x="7" y="4" width="1" height="1"/></g></svg>
+          </button>
+          <!-- incoming enemy group: slides over the score bar for a few seconds -->
+          <div id="hud-banner" class="hidden"><b id="banner-text"></b><span id="banner-tags"></span></div>
         </header>
         <canvas id="board"></canvas>
+        <!-- one-line controls reminder under the board -->
+        <div id="hint"></div>
       </div>
     </main>
 
@@ -42,7 +50,7 @@
 
       <!-- Always takes up the same space, so the board never jumps when a sprite appears -->
       <div id="card" class="card empty">
-        <div class="card-empty">Type a word and press SPAWN to find a tower. Tap a tower or an enemy on the board to inspect it.</div>
+        <div class="card-empty">Type a word and press SPAWN to find a tower. Tap a tower or an enemy on the board to see its tags.</div>
         <canvas id="card-sprite" class="sprite" width="16" height="16"></canvas>
         <div class="card-body">
           <div id="card-name" class="card-name"></div>
@@ -75,10 +83,13 @@
       <div id="menu-loading" class="loading">Loading sprite index...</div>
       <div class="menu-buttons">
         <button type="button" class="px-btn big" id="btn-new" disabled>NEW RUN</button>
-        <button type="button" class="px-btn" data-toggle="how">HOW TO PLAY</button>
-        <button type="button" class="px-btn" data-sound>SOUND: ON</button>
       </div>
-      <div class="how hidden" data-how></div>
+      <ul class="tips">
+        <li>Build a maze to defend your base from enemies</li>
+        <li>Less optimal mazes get a bonus every wave</li>
+        <li>Type any word to spawn a tower and place it on a block</li>
+        <li>Kill enemies for gold, towers increase in cost, survive as long as you can!</li>
+      </ul>
       <div class="deco" data-deco="8"></div>
     </div>
   </div>

@@ -61,6 +61,7 @@ export function newRun() {
     freeTowers: CONFIG.run.freeTowers, paidTowers: 0,
     towers: [], enemies: [], shots: [], fx: [], spawnQueue: [], banner: null,
   });
+  state.shownTier = -1;      // which layout rating word was last announced (-1 = none yet)
   state.blocks.fill(0);
   state.towerAt.clear();
   refreshPaths();
@@ -150,18 +151,42 @@ function distanceField() {
   return dist;
 }
 
-// Walk from spawn to home, always stepping to a cell one step closer. At a fork, take the
-// first direction in `order` that works. Two opposite orders give the two most different routes.
-function routeBy(dist, order) {
+// Walk from spawn to home, always stepping to a cell one step closer.
+// `side` is 0 for the route that leans left at forks and 1 for the one that leans right, so the
+// two routes are mirror images of each other on a mirrored maze.
+//
+// Not every tie is a fork. In open space "down then left" and "left then down" are the same
+// trip, so both routes make the same choice there and stay together. A real fork is either two
+// opposite ways on (left and right, or up and down) or two ways on that do not meet again at the corner.
+function routeBy(dist, side) {
+  const at = (cx, cy) => (inBoard(cx, cy) ? dist[cellIndex(cx, cy)] : -1);
   const cells = [{ x: B.spawn.x, y: B.spawn.y }];
   let x = B.spawn.x, y = B.spawn.y;
-  if (dist[cellIndex(x, y)] < 0) return null;
-  while (dist[cellIndex(x, y)] > 0) {
-    const here = dist[cellIndex(x, y)];
-    for (const [dx, dy] of order) {
-      const nx = x + dx, ny = y + dy;
-      if (inBoard(nx, ny) && dist[cellIndex(nx, ny)] === here - 1) { x = nx; y = ny; break; }
+  if (at(x, y) < 0) return null;
+  while (at(x, y) > 0) {
+    const d = at(x, y);
+    const down = at(x, y + 1) === d - 1, up = at(x, y - 1) === d - 1;
+    const left = at(x - 1, y) === d - 1, right = at(x + 1, y) === d - 1;
+    let dx = 0, dy = 0;
+    if (down && up) {
+      dy = side === 0 ? 1 : -1;                       // fork: one route goes down, the other up
+    } else if (!down && !up) {
+      dx = left && right ? (side === 0 ? -1 : 1) : left ? -1 : 1;   // fork if both, else the only way
+    } else {
+      const vy = down ? 1 : -1;
+      // a sideways step is a separate corridor only if it does not rejoin at the diagonal square
+      const leftIsFork = left && at(x - 1, y + vy) !== d - 2;
+      const rightIsFork = right && at(x + 1, y + vy) !== d - 2;
+      if (leftIsFork && rightIsFork) dx = side === 0 ? -1 : 1;
+      else if (leftIsFork && side === 0) dx = -1;     // the left-leaning route takes the left corridor
+      else if (rightIsFork && side === 1) dx = 1;     // the right-leaning route takes the right corridor
+      // Open space: step sideways only when that heads towards the home column, so split routes
+      // hug the obstacle on the way out and merge again as soon as they can. Otherwise go vertical.
+      else if (left && !leftIsFork && x > B.home.x) dx = -1;
+      else if (right && !rightIsFork && x < B.home.x) dx = 1;
+      else dy = vy;
     }
+    x += dx; y += dy;
     cells.push({ x, y });
   }
   return cells;
@@ -170,13 +195,13 @@ function routeBy(dist, order) {
 /**
  * Rebuild the routes. Enemies enter from one cell above the spawn.
  * When there are equally short ways home the route splits in two and walkers alternate:
- * one route takes the first choice at every fork (down, left, right, up), the other the last.
+ * one route leans left at every fork, the other leans right (see routeBy).
  */
 export function refreshPaths() {
   const entry = { x: B.spawn.x, y: B.spawn.y - 1 };
   const dist = distanceField();
-  const a = routeBy(dist, [[0, 1], [-1, 0], [1, 0], [0, -1]]) || [B.spawn, B.home];
-  const b = routeBy(dist, [[0, -1], [1, 0], [-1, 0], [0, 1]]) || a;
+  const a = routeBy(dist, 0) || [B.spawn, B.home];
+  const b = routeBy(dist, 1) || a;
   const same = a.length === b.length && a.every((c, i) => c.x === b[i].x && c.y === b[i].y);
   state.groundPath = makePath([entry, ...a]);
   state.groundPaths = same ? [state.groundPath] : [state.groundPath, makePath([entry, ...b])];
@@ -246,7 +271,7 @@ export function mazeStyle() {
  * Place or remove a block. Build phase only. Returns { ok, msg, placed }.
  * A block is refused if it would leave no route from spawn to home.
  */
-export function toggleBlock(x, y) {
+export function toggleBlock(x, y, quiet = false) {   // quiet: no error buzz (used while dragging)
   if (state.phase !== "build") return { ok: false, msg: "Blocks can only be changed between waves." };
   if (isSpawn(x, y) || isHome(x, y)) return { ok: false, msg: "That square must stay open." };
   const i = cellIndex(x, y);
@@ -257,7 +282,7 @@ export function toggleBlock(x, y) {
     sfx.erase();
     return { ok: true, placed: false };
   }
-  if (!findPath(i)) { sfx.error(); return { ok: false, msg: "That would seal the path. Enemies need a way through." }; }
+  if (!findPath(i)) { if (!quiet) sfx.error(); return { ok: false, msg: "That would seal the path. Enemies need a way through." }; }
   state.blocks[i] = 1;
   refreshPaths();
   sfx.block();
@@ -427,9 +452,17 @@ export async function startWave() {
     state.lastStyle = style;
     state.gold += style.gold;
     const hot = style.tier >= CONFIG.style.tiers.length - 4;      // the top tiers get the loud treatment
-    bigText(style.word + "!", style.gold ? `maze bonus +${style.gold} gold` : "no maze bonus", hot ? "#f59e0b" : "#64748b", 2.0);
+    // The rating word is only announced the first time, and again if the layout earns a different
+    // word. Every other wave it is just a plain "layout bonus" line, or nothing if there is no bonus.
+    const announce = style.tier !== state.shownTier;
+    state.shownTier = style.tier;
+    if (announce) {
+      bigText(style.word + "!", style.gold ? `layout bonus +${style.gold} gold` : "no layout bonus", hot ? "#f59e0b" : "#64748b", 2.6, "Your layout is...");
+    } else if (style.gold) {
+      bigText("LAYOUT BONUS", `+${style.gold} gold`, "#64748b", 1.4);
+    }
     if (style.gold) burst(B.cols / 2 - 0.5, B.rows * 0.4, 8 + style.tier * 4, ["#facc15", "#f59e0b", "#ffffff"]);
-    sfx.style(style.tier, CONFIG.style.tiers.length);
+    if (announce) sfx.style(style.tier, CONFIG.style.tiers.length); else sfx.wave();
   } else {
     sfx.wave();
   }
@@ -905,9 +938,9 @@ export function floatText(x, y, text, color, scale = 1) {
 }
 
 /** A large announcement across the middle of the board (maze rating, wave clear). */
-export function bigText(text, sub, color, seconds) {
+export function bigText(text, sub, color, seconds, pre = "") {   // pre: small lead-in line above the big text
   state.fx = state.fx.filter((f) => f.kind !== "big");      // only one at a time
-  state.fx.push({ kind: "big", text, sub, color, life: seconds, max: seconds });
+  state.fx.push({ kind: "big", text, sub, pre, color, life: seconds, max: seconds });
 }
 
 /** A puff of little square sparks that fly out and fall, for kills and celebrations. */

@@ -268,7 +268,7 @@ export function draw() {
     g.globalAlpha = 1;
   }
 
-  drawBanner(g);
+  // (the incoming-group banner now lives in the score bar, see ui.js)
 }
 
 function rangeRing(g, x, y, range, color) {
@@ -376,6 +376,13 @@ function drawBigText(g, f) {
   g.strokeText(f.text, 0, 0);
   g.fillStyle = "#1e293b"; g.fillText(f.text, size * 0.06, size * 0.06);   // hard drop shadow
   g.fillStyle = f.color; g.fillText(f.text, 0, 0);
+  if (f.pre) {
+    const lead = Math.max(11, Math.round(s * 0.46));
+    g.font = `700 ${lead}px "Pixelify Sans", "Courier New", monospace`;
+    g.lineWidth = Math.max(3, lead * 0.3); g.strokeStyle = "#ffffff";
+    g.strokeText(f.pre, 0, -size * 0.85);
+    g.fillStyle = "#1e293b"; g.fillText(f.pre, 0, -size * 0.85);
+  }
   if (f.sub) {
     const sub = Math.max(11, Math.round(s * 0.42));
     g.font = `700 ${sub}px "Pixelify Sans", "Courier New", monospace`;

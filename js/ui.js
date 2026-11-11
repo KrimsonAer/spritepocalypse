@@ -22,7 +22,9 @@ import { TOWER_TAG_INFO, ENEMY_TAG_INFO } from "./taginfo.js";
 
 const $ = (id) => document.getElementById(id);
 
-let candidate = null;    // the searched sprite waiting to be placed
+let candidate = null;    // the searched sprite shown on the card
+let armed = false;       // true once the player has clicked the card to SELECT that sprite for placing
+let cardMoved = 0;       // how far the pointer travelled during a card drag (a drag is not a click)
 let lastQuery = "";      // text of the last successful search (used by Reroll)
 let moveMode = false;    // true after pressing Move on a selected tower
 let press = null;        // pointer currently held on the board
@@ -34,12 +36,13 @@ const HOW_TO_PLAY = [
   "Enemies walk from the red arrow at the top to the house at the bottom. Each one that gets home costs a heart.",
   "Tap squares to draw blocks and build a maze. You can never seal the path completely.",
   "Enemies take the shortest way home. If two ways are equally short, they split between them.",
-  "Type any word and press SPAWN. You get the sprite closest in meaning, and its tags. Tap a block to place it as a tower.",
+  "Type any word and press SPAWN. You get the sprite closest in meaning, and its tags. Click it to select it, then tap a block.",
+  "Drag across squares to draw several blocks at once. Start the drag on a block to erase.",
   "Tags decide what a tower does: its attack shape, damage type, range and extras.",
   "Your first 5 towers are free. After that towers cost gold, which you earn from kills.",
   "Until you press START WAVE you can move or remove new towers for free. After that they are locked and sell for half.",
   "Tap a locked tower or an enemy to see its tags. Hover or tap a tag to read what it does.",
-  "Each time you start a wave your maze is rated. The further it is from the obvious zigzag, the more bonus gold you get.",
+  "Your layout is rated when you start a wave. The further it is from the obvious zigzag, the bigger the layout bonus every wave.",
   "Flying enemies skip the maze. Only some towers can hit them. Every few waves ends with a boss.",
 ];
 
@@ -56,7 +59,12 @@ export function initUI() {
     const st = $("stage");
     const availW = st.clientWidth - 18, availH = st.clientHeight - 18;
     const hudH = Math.max(40, Math.min(110, Math.round(Math.min(availH * 0.085, availW * 0.15))));
-    resize(canvas, availW, availH - hudH);
+    const hintH = Math.round(hudH * 0.72);        // controls reminder under the board
+    resize(canvas, availW, availH - hudH - hintH);
+    const hint = $("hint");
+    hint.style.width = canvas.style.width;
+    hint.style.height = hintH + "px";
+    hint.style.fontSize = Math.max(10, Math.round(hudH * 0.25)) + "px";
     const hud = $("hud");
     hud.style.width = canvas.style.width;
     hud.style.height = hudH + "px";
@@ -96,7 +104,16 @@ export function initUI() {
     sfx.click();
   }));
   document.querySelectorAll("[data-sound]").forEach((b) => b.addEventListener("click", () => { unlockAudio(); setSound(!soundOn()); sfx.click(); refreshSoundButtons(); }));
+  $("btn-sound").addEventListener("click", () => { unlockAudio(); setSound(!soundOn()); sfx.click(); refreshSoundButtons(); });
   refreshSoundButtons();
+
+  // clicking the card SELECTS the searched sprite (click again to let go of it)
+  $("card").addEventListener("click", (ev) => {
+    if (!candidate || ev.target.closest(".card-actions") || ev.target.closest(".tag")) return;
+    if (cardMoved > 8) { cardMoved = 0; return; }      // that was a drag, not a click
+    setArmed(!armed);
+    sfx.click();
+  });
 
   // board input
   canvas.addEventListener("pointerdown", onBoardDown);
@@ -110,12 +127,15 @@ export function initUI() {
   const sprite = $("card-sprite");
   sprite.addEventListener("pointerdown", (ev) => {
     if (!candidate) return;
-    cardDrag = true;
+    cardDrag = true; cardMoved = 0;
+    press = null;
+    cardStart = { x: ev.clientX, y: ev.clientY };
     try { sprite.setPointerCapture(ev.pointerId); } catch (err) { /* carry on without capture */ }
     view.ghost = { pack: candidate.pack, drawing: candidate.drawing, px: ev.clientX, py: ev.clientY };
   });
   sprite.addEventListener("pointermove", (ev) => {
     if (!cardDrag) return;
+    cardMoved = Math.max(cardMoved, Math.hypot(ev.clientX - cardStart.x, ev.clientY - cardStart.y));
     view.ghost.px = ev.clientX; view.ghost.py = ev.clientY;
     view.hover = cellAt(ev.clientX, ev.clientY);
   });
@@ -148,8 +168,21 @@ export function onDataReady() {
 
 const overlayOpen = () => ["menu", "pause", "over"].some((id) => !$(id).classList.contains("hidden"));
 
+let cardStart = { x: 0, y: 0 };
+
 function refreshSoundButtons() {
   document.querySelectorAll("[data-sound]").forEach((b) => { b.textContent = `SOUND: ${soundOn() ? "ON" : "OFF"}`; });
+  $("btn-sound").classList.toggle("off", !soundOn());
+}
+
+// Select or let go of the searched sprite. While selected, board taps place it and nothing else
+// on the board can be picked. While not selected, towers and enemies can be tapped as normal.
+function setArmed(on) {
+  armed = on && !!candidate;
+  view.armed = armed ? candidate : null;
+  if (armed) { view.selected = null; view.selectedEnemy = null; moveMode = false; }
+  showCard();
+  setMsg(armed ? "Selected. Tap a block to place it." : candidate ? "Click the sprite to select it, or drag it onto a block." : "");
 }
 
 // Fill a menu's decoration strips with random sprites, different every time it opens.
@@ -174,7 +207,7 @@ function beginRun() {
   unlockAudio();
   sfx.click();
   newRun();
-  candidate = null; moveMode = false;
+  candidate = null; moveMode = false; armed = false;
   view.armed = null; view.selected = null; view.selectedEnemy = null;
   ["menu", "pause", "over"].forEach((id) => $(id).classList.add("hidden"));
   seen = { hearts: state.hearts, gold: state.gold, wave: state.wave, score: state.score };   // no pops for the reset
@@ -211,7 +244,7 @@ async function search(text) {
   if (ticket !== searching) return;            // a newer search has started
   if (!hit) {
     sfx.error();
-    candidate = null; view.armed = null;
+    candidate = null; armed = false; view.armed = null;
     showCard();
     setMsg(`Nothing matches "${query}". Try a different word.`, true);
     return;
@@ -225,10 +258,10 @@ async function search(text) {
     lastQuery = query;
     moveMode = false;
     view.selected = null; view.selectedEnemy = null;
-    view.armed = candidate;
+    armed = false; view.armed = null;          // found, but not selected until the card is clicked
     showCard();
     sfx.found();
-    setMsg("Tap a block to place it, or drag it there.");
+    setMsg("Click the sprite to select it, or drag it onto a block.");
   } catch (err) {
     setMsg(err.message, true);
   }
@@ -253,6 +286,8 @@ function showCard() {
   const item = candidate || view.selected || enemy;
   card.classList.toggle("empty", !item);
   card.classList.toggle("enemy", !!enemy);
+  card.classList.toggle("candidate", !!candidate);
+  card.classList.toggle("selected", !!candidate && armed);
   if (!item) return;
   const g = $("card-sprite").getContext("2d");
   g.clearRect(0, 0, 16, 16);
@@ -276,10 +311,10 @@ function showCard() {
   $("card-name").textContent = item.subject.name;
   if (candidate) {
     $("card-tags").innerHTML = item.tags.map((t) => tagChip(t, "")).join("");
-    const price = towerPrice();
-    $("card-note").textContent = price === 0 ? `Free (${state.freeTowers} free left)` : `Costs ${price} gold`;
+    $("card-note").textContent = candidateNote();
+    button(armed ? "SELECTED" : "SELECT", () => { setArmed(!armed); sfx.click(); }, armed ? "on" : "");
     button("REROLL", () => search(lastQuery));
-    button("CANCEL", () => { candidate = null; view.armed = null; showCard(); setMsg(""); });
+    button("CANCEL", () => { candidate = null; armed = false; view.armed = null; showCard(); setMsg(""); });
   } else {
     const t = view.selected;
     // a tower explains its tags only once it is locked in
@@ -288,6 +323,13 @@ function showCard() {
     if (!t.locked) button(moveMode ? "PICK A BLOCK" : "MOVE", () => { moveMode = !moveMode; showCard(); setMsg(moveMode ? "Tap a free block to move it there." : ""); }, moveMode ? "on" : "");
     button(t.locked ? `SELL +${refundFor(t)}` : "REMOVE", () => { removeTower(t); clearSelection(); }, "danger");
   }
+}
+
+// The line under a searched sprite: its price, and whether it is selected yet.
+function candidateNote() {
+  const price = towerPrice();
+  const cost = price === 0 ? `Free (${state.freeTowers} free left)` : `Costs ${price} gold`;
+  return armed ? `${cost}. Selected: tap a block.` : `${cost}. Click to select.`;
 }
 
 function clearSelection() {
@@ -333,7 +375,7 @@ function hideTip() {
 function tryPlace(cell) {
   const res = placeTower(cell.x, cell.y, candidate);
   if (!res.ok) { if (res.msg) setMsg(res.msg, true); return; }
-  candidate = null; view.armed = null;
+  candidate = null; armed = false; view.armed = null;
   showCard();
   setMsg(state.phase === "build" ? "Placed. Press Enter for another one." : "Placed and locked in.");
 }
@@ -358,9 +400,33 @@ function onBoardDown(ev) {
   press = { cell, x: ev.clientX, y: ev.clientY, tower: state.towerAt.get(cellIndex(cell.x, cell.y)) || null, dragging: false };
 }
 
+// Draw or erase one block as part of a drag. Squares that cannot change are skipped silently.
+function paintCell(x, y, place) {
+  const i = cellIndex(x, y);
+  if (state.towerAt.has(i) || !!state.blocks[i] === place) return;
+  toggleBlock(x, y, true);
+}
+
 function onBoardMove(ev) {
   view.hover = cellAt(ev.clientX, ev.clientY);
   if (!press) return;
+  // Dragging across squares in the build phase draws blocks. Start on an empty square to draw,
+  // start on a bare block to erase. (Not while a sprite is selected or a tower is being moved.)
+  if (!press.tower && !armed && !moveMode && state.phase === "build" && view.hover) {
+    const c = view.hover;
+    if (!press.paint && (c.x !== press.cell.x || c.y !== press.cell.y)) {
+      press.paint = { place: !state.blocks[cellIndex(press.cell.x, press.cell.y)], last: press.cell };
+      if (view.selected || view.selectedEnemy) clearSelection();
+      paintCell(press.cell.x, press.cell.y, press.paint.place);
+    }
+    if (press.paint) {
+      // fill in every square between the last one and this one, so a fast drag leaves no gaps
+      const a = press.paint.last, n = Math.max(Math.abs(c.x - a.x), Math.abs(c.y - a.y));
+      for (let k = 1; k <= n; k++) paintCell(Math.round(a.x + ((c.x - a.x) * k) / n), Math.round(a.y + ((c.y - a.y) * k) / n), press.paint.place);
+      press.paint.last = c;
+      return;
+    }
+  }
   // dragging an unlocked tower starts once the pointer has moved a little
   if (!press.dragging && press.tower && !press.tower.locked && Math.hypot(ev.clientX - press.x, ev.clientY - press.y) > 8) {
     press.dragging = true;
@@ -383,11 +449,13 @@ function onBoardUp(ev) {
     }
     return;
   }
+  if (p.paint) return;                         // that was a block-drawing drag
   if (cell.x !== p.cell.x || cell.y !== p.cell.y) return;
-  // an enemy under the pointer is inspected, unless a sprite is waiting to be placed
-  if (!candidate && !moveMode && state.phase === "wave") {
+  // an enemy under the pointer is inspected, unless a sprite is selected for placing
+  if (!armed && !moveMode && state.phase === "wave") {
     const enemy = enemyAt(ev.clientX, ev.clientY);
     if (enemy) {
+      candidate = null;
       view.selected = null;
       view.selectedEnemy = view.selectedEnemy === enemy ? null : enemy;
       showCard();
@@ -403,6 +471,7 @@ function tapCell(cell) {
   const tower = state.towerAt.get(i);
 
   if (tower) {                                   // tap a tower: select it (tap again to deselect)
+    if (armed) { setMsg("That block already has a tower.", true); return; }   // a selected sprite blocks other picks
     if (moveMode) { setMsg("That block already has a tower.", true); return; }
     candidate = null; view.armed = null; view.selectedEnemy = null;
     view.selected = view.selected === tower ? null : tower;
@@ -411,7 +480,7 @@ function tapCell(cell) {
   }
 
   if (state.blocks[i]) {                         // tap a bare block
-    if (candidate) { tryPlace(cell); return; }
+    if (armed) { tryPlace(cell); return; }
     if (moveMode && view.selected) {
       const res = moveTower(view.selected, cell.x, cell.y);
       if (!res.ok) setMsg(res.msg, true);
@@ -427,7 +496,7 @@ function tapCell(cell) {
 
   // tap an empty square
   if (view.selected || view.selectedEnemy) clearSelection();
-  if (state.phase !== "build") { setMsg(candidate ? "Towers stand on blocks. Blocks can only be drawn between waves." : "Blocks can only be drawn between waves.", true); return; }
+  if (state.phase !== "build") { setMsg(armed ? "Towers stand on blocks. Blocks can only be drawn between waves." : "Blocks can only be drawn between waves.", true); return; }
   const res = toggleBlock(cell.x, cell.y);
   if (!res.ok) setMsg(res.msg, true);
 }
@@ -512,8 +581,7 @@ export function refreshUI() {
 
   // the price on the card can change while it is open (free towers used, gold spent)
   if (candidate) {
-    const price = towerPrice();
-    setText("card-note", price === 0 ? `Free (${state.freeTowers} free left)` : `Costs ${price} gold`);
+    setText("card-note", candidateNote());
   } else {
     shown["card-note"] = null;
   }
@@ -521,6 +589,26 @@ export function refreshUI() {
   if (view.selected && view.selected.locked !== shown.selLocked) { shown.selLocked = view.selected.locked; showCard(); }
   if (view.selected && !state.towers.includes(view.selected)) clearSelection();
   if (view.selectedEnemy && view.selectedEnemy.dead) { view.selectedEnemy = null; showCard(); }
+
+  // controls reminder under the board
+  const hint = state.phase === "wave"
+    ? "<b>TAP</b> a tower or an enemy to see its tags. Towers can still be bought."
+    : "<b>TAP</b> or <b>DRAG</b> to draw blocks. Start on a block to erase. <b>TYPE</b> a word, <b>SELECT</b> the sprite, tap a block.";
+  if (shown.hint !== hint) { shown.hint = hint; $("hint").innerHTML = "<span>" + hint + "</span>"; }
+
+  // incoming enemy group: covers the score bar for a few seconds
+  const b = state.banner;
+  const bannerKey = b && state.phase === "wave" && state.time <= b.until ? b.text : "";
+  if (shown.banner !== bannerKey) {
+    shown.banner = bannerKey;
+    const el = $("hud-banner");
+    el.classList.toggle("hidden", !bannerKey);
+    if (bannerKey) {
+      el.classList.toggle("boss", b.text.startsWith("BOSS"));
+      $("banner-text").textContent = b.text.toUpperCase();
+      $("banner-tags").textContent = b.tags.length ? b.tags.join("  ") : "nothing special";
+    }
+  }
 
   if (state.phase === "over" && $("over").classList.contains("hidden")) {
     $("over-stats").textContent = `You reached wave ${state.wave} with ${state.kills} kills. Score ${state.score}.`;

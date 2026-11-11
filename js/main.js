@@ -42,4 +42,4 @@ async function boot() {
 boot();
 
 // Handy for poking at the game from the browser console while tuning.
-window.spritepocalypse = { state, step, findSubject, semanticTop };
+window.spritepocalypse = { state, step, refreshUI, findSubject, semanticTop };

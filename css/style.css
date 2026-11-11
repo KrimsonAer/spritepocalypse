@@ -271,3 +271,45 @@ canvas, .sprite { image-rendering: pixelated; image-rendering: crisp-edges; }
   .px-btn.big { font-size: 1.1em; }
   #controls .speed .px-btn { padding: 0.5em 0.4em; }
 }
+
+/* ---------------------------------------------------------------- score bar extras */
+#hud { position: relative; }
+/* speaker button at the right end of the score bar */
+.stat.sound { flex: 0 0 auto; padding: 0 0.3em; font: inherit; color: inherit; cursor: pointer; }
+.stat.sound .ico { width: 0.75em; height: 0.66em; }
+.stat.sound .cross { display: none; }
+.stat.sound.off .waves { display: none; }
+.stat.sound.off .cross { display: inline; }
+.stat.sound.off { opacity: 0.75; }
+/* incoming enemy group, covering the score bar for a few seconds */
+#hud-banner {
+  position: absolute; inset: 0; z-index: 6;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.06em;
+  background: #7f1d1d; color: #fff; border: 2px solid #fecaca;
+  line-height: 1; overflow: hidden; white-space: nowrap;
+  animation: banner-in 0.25s steps(5);
+}
+#hud-banner.boss { background: #be123c; }
+#hud-banner b { font-size: 0.5em; max-width: 96%; overflow: hidden; text-overflow: ellipsis; }
+#hud-banner span { font-size: 0.34em; color: #fde68a; letter-spacing: 0.06em; }
+@keyframes banner-in { 0% { transform: translateY(-100%); } 100% { transform: translateY(0); } }
+
+/* one-line controls reminder under the board. ui.js sets its height and font-size. */
+#hint {
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 0.6em; text-align: center; line-height: 1.15;
+  background: var(--ink); color: #cbd5e1;
+  border-top: var(--px) solid #0f172a;
+  overflow: hidden;
+}
+#hint b { color: #fde047; font-weight: 700; }
+
+/* the searched sprite, once clicked, is "selected" and ready to place */
+.card.candidate { cursor: pointer; }
+.card.selected { border-color: var(--accent); background: #fffbeb; box-shadow: 0 0 0 3px var(--accent), 4px 4px 0 3px rgba(15, 23, 42, 0.35); }
+.card.selected .sprite { border-color: var(--accent); animation: bob 0.8s steps(2) infinite; }
+
+/* how-to lines on the main menu */
+.tips { list-style: none; margin: 0.7em auto 0.5em; padding: 0; max-width: 21em; text-align: left; font-size: 0.85em; line-height: 1.3; color: #1e293b; }
+.tips li { position: relative; padding: 0.15em 0 0.15em 1.2em; }
+.tips li::before { content: ""; position: absolute; left: 0.2em; top: 0.55em; width: 0.45em; height: 0.45em; background: var(--accent); border: 2px solid var(--ink); }
