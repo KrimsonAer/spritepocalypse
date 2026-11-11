@@ -7,7 +7,7 @@
 // Numbers come from config.js. Tags are explained in GDD.md.
 // =====================================================================================
 
-import { CONFIG, ELEMENT_COLORS, COMBOS } from "./config.js";
+import { CONFIG, ELEMENT_COLORS, COMBOS, COMBO_STRONGER } from "./config.js";
 import { loadPack, randomSubject, enemyTagsFor } from "./data.js";
 import { pickDrawing } from "./search.js";
 import { sfx } from "./audio.js";
@@ -407,7 +407,12 @@ export const towerRange = (tower) => tower.stats.range + tower.aura.range + towe
 // ------------------------------------------------------------------------------------
 
 function noCombo() {
-  return { dmg: 1, rate: 1, range: 0, crit: 0, status: 1, gold: 1, imbue: [], antiAir: false, slow: false, knockback: false, pierceArmor: false, blastProof: false };
+  return {
+    dmg: 1, rate: 1, range: 0, crit: 0, status: 1, gold: 1, imbue: [], antiAir: false, slow: false, knockback: false, pierceArmor: false, blastProof: false,
+    // stronger versions (1 or 0 = no change), see COMBO_STRONGER in config.js
+    waterPush: 1, flyerDamage: 1, rootTime: 1, curseBonus: 0, poisonPower: 1, slowFactor: 1, knockback2: 1,
+    strong: [],                 // categories this tower gets the stronger version of
+  };
 }
 
 let comboPairs = new Set();   // "towerId-towerId-category" for every linked pair, to spot NEW combos
@@ -451,6 +456,20 @@ function refreshCombos() {
       if (bonus.gold) c.gold *= bonus.gold;
       if (bonus.imbue && !c.imbue.includes(bonus.imbue)) c.imbue.push(bonus.imbue);
       for (const flag of ["antiAir", "slow", "knockback", "pierceArmor", "blastProof"]) if (bonus[flag]) c[flag] = true;
+      // Already has the effect this combo gives? Then it gets the stronger version instead.
+      const X = COMBO_STRONGER, own = t.stats;
+      const already = (bonus.imbue && own.elems.includes(bonus.imbue)) || (bonus.antiAir && own.antiAir) ||
+        (bonus.slow && own.slow) || (bonus.knockback && own.knockback);
+      if (already) {
+        c.strong.push(cat);
+        if (bonus.imbue === "Water") c.waterPush = X.waterPush;
+        if (bonus.imbue === "Nature") c.rootTime = X.rootTime;
+        if (bonus.imbue === "Dark") c.curseBonus = X.curseBonus;
+        if (bonus.imbue === "Poison") c.poisonPower = X.poisonPower;
+        if (bonus.antiAir) c.flyerDamage = X.flyerDamage;
+        if (bonus.slow) c.slowFactor = X.slowFactor;
+        if (bonus.knockback) c.knockback2 = X.knockback;
+      }
     }
     t.combo = c;
   }
@@ -836,6 +855,7 @@ function applyHit(tower, e, dmg, opts) {
     return;
   }
   let total = dmg * tower.aura.dmg * tower.combo.dmg;
+  if (e.flying) total *= tower.combo.flyerDamage;          // Birds combo, stronger version
   let crit = false;
   const critChance = (s.crit ? T.critChance : 0) + tower.combo.crit;
   if (critChance > 0 && Math.random() < critChance) { total *= T.critMultiplier; crit = true; }
@@ -846,7 +866,7 @@ function applyHit(tower, e, dmg, opts) {
     if (el === "Physical" && e.armored && !e.shredded && !tower.combo.pierceArmor) part *= E.armoredPhysical;
     dealt += part;
   }
-  if (state.time < e.curseUntil) dealt *= CONFIG.elements.Dark.curse;
+  if (state.time < e.curseUntil) dealt *= e.curseMult || CONFIG.elements.Dark.curse;
   e.lastTower = tower;
   hurt(e, dealt, tower, { color: s.color, crit, ignoreShield: s.holy });
   if (e.dead) return;
@@ -885,27 +905,30 @@ function applyStatuses(tower, e, dealt) {
     } else if (el === "Ice" && !e.kinds.includes("Ice")) {
       slowEnemy(e, C.Ice.slow, C.Ice.time * m);
     } else if (el === "Poison" && !e.kinds.includes("Poison") && !e.kinds.includes("Machine")) {
-      const dps = (dealt * C.Poison.share) / C.Poison.time;
+      const dps = (dealt * C.Poison.share * tower.combo.poisonPower) / C.Poison.time;
       const stacks = Math.min(C.Poison.maxStacks, (e.poison ? e.poison.stacks : 0) + 1);
       e.poison = { dps: Math.max(dps, e.poison ? e.poison.dps : 0), stacks, until: now + C.Poison.time * m, color: ELEMENT_COLORS.Poison };
     } else if (el === "Lightning") {
       if (Math.random() < C.Lightning.stunChance) stunEnemy(e, C.Lightning.stunTime * m);
     } else if (el === "Dark") {
+      // a stronger curse (Monsters combo) is kept while it lasts; a weaker one does not replace it
+      const mult = C.Dark.curse + tower.combo.curseBonus;
+      e.curseMult = now < e.curseUntil ? Math.max(e.curseMult || C.Dark.curse, mult) : mult;
       e.curseUntil = now + C.Dark.time * m;
     } else if (el === "Water") {
-      pushEnemy(e, C.Water.knockback);
+      pushEnemy(e, C.Water.knockback * tower.combo.waterPush);
     } else if (el === "Nature" && now > e.rootImmuneUntil && !e.unstoppable) {
-      stunEnemy(e, C.Nature.root * m);
+      stunEnemy(e, C.Nature.root * m * tower.combo.rootTime);
       e.rootImmuneUntil = now + C.Nature.cooldown;
     }
   }
   if (s.stun && Math.random() < T.stunChance) stunEnemy(e, T.stunTime * m);
-  if (s.slow || tower.combo.slow) slowEnemy(e, T.slowFactor, T.slowTime * m);
+  if (s.slow || tower.combo.slow) slowEnemy(e, T.slowFactor * tower.combo.slowFactor, T.slowTime * m);
   if (s.bleed) {
     const dps = (dealt * T.bleedShare) / T.bleedTime;
     if (!e.bleed || dps >= e.bleed.dps) e.bleed = { dps, until: now + T.bleedTime * m, color: "#dc2626" };
   }
-  if (s.knockback || tower.combo.knockback) pushEnemy(e, T.knockback);
+  if (s.knockback || tower.combo.knockback) pushEnemy(e, T.knockback * tower.combo.knockback2);
   if (s.shred) e.shredded = true;
 }
 

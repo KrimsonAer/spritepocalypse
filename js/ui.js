@@ -335,7 +335,7 @@ function showCard() {
     const support = t.stats.shape === "Support";
     const info = (tag) => (support && SUPPORT_ELEMENT_INFO[tag]) || TOWER_TAG_INFO[tag];
     // combos only show here, on a placed tower that is in one (never on the search card)
-    const combos = (t.combos || []).map((cat) => `<span class="tag combo explains" style="--c:${COMBOS[cat].color}" data-tip="${COMBOS[cat].desc}">${COMBOS[cat].name.toUpperCase()} COMBO</span>`).join("");
+    const combos = (t.combos || []).map((cat) => `<span class="tag combo explains" style="--c:${COMBOS[cat].color}" data-tip="${(t.combo.strong || []).includes(cat) && COMBOS[cat].strong ? COMBOS[cat].strong : COMBOS[cat].desc}">${COMBOS[cat].name.toUpperCase()} COMBO</span>`).join("");
     $("card-tags").innerHTML = t.tags.map((tag) => tagChip(tag, t.locked ? info(tag) : "")).join("") + combos;
     shown.selCombos = (t.combos || []).join(" ");
     $("card-note").textContent = t.locked ? `Locked in. Kills: ${t.kills}. Hover or tap a tag to read it.` : "Not locked yet. Move or remove it for free.";

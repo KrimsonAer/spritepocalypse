@@ -231,28 +231,41 @@ export const CONFIG = {
 // =====================================================================================
 export const COMBOS = {
   food:      { name: "Food",      color: "#f97316", bonus: { dmg: 0.25 },          desc: "Well fed: these towers hit harder." },
-  desserts:  { name: "Desserts",  color: "#f472b6", bonus: { slow: true },         desc: "Sugar crash: their hits slow enemies down." },
+  desserts:  { name: "Desserts",  color: "#f472b6", bonus: { slow: true },         desc: "Sugar crash: their hits slow enemies down.", strong: "Sugar crash: their slows are much stronger." },
   drinks:    { name: "Drinks",    color: "#38bdf8", bonus: { rate: 0.25 },         desc: "Caffeinated: these towers attack faster." },
   weapons:   { name: "Weapons",   color: "#94a3b8", bonus: { crit: 0.15 },         desc: "Armed: more critical hits." },
   ranged:    { name: "Ranged",    color: "#a16207", bonus: { range: 1 },           desc: "Spotters: these towers reach further." },
   armour:    { name: "Armour",    color: "#64748b", bonus: { blastProof: true },   desc: "Braced: exploding enemies cannot stun these towers." },
   land:      { name: "Land Animals", color: "#84cc16", bonus: { rate: 0.2 },      desc: "Pack hunters: these towers attack faster." },
-  sea:       { name: "Sea Creatures", color: "#0ea5e9", bonus: { imbue: "Water" }, desc: "Tidal: their hits knock enemies back down the path." },
-  birds:     { name: "Birds",     color: "#facc15", bonus: { antiAir: true },      desc: "Flock: these towers can hit flying enemies." },
-  bugs:      { name: "Bugs",      color: "#65a30d", bonus: { imbue: "Poison" },    desc: "Swarm: their hits poison enemies." },
-  monsters:  { name: "Monsters",  color: "#7c3aed", bonus: { imbue: "Dark" },      desc: "Horde: their hits curse enemies so they take more damage." },
+  sea:       { name: "Sea Creatures", color: "#0ea5e9", bonus: { imbue: "Water" }, desc: "Tidal: their hits knock enemies back down the path.", strong: "Tidal: their water knocks enemies much further back." },
+  birds:     { name: "Birds",     color: "#facc15", bonus: { antiAir: true },      desc: "Flock: these towers can hit flying enemies.", strong: "Flock: these towers hit flying enemies much harder." },
+  bugs:      { name: "Bugs",      color: "#65a30d", bonus: { imbue: "Poison" },    desc: "Swarm: their hits poison enemies.", strong: "Swarm: their poison is much stronger." },
+  monsters:  { name: "Monsters",  color: "#7c3aed", bonus: { imbue: "Dark" },      desc: "Horde: their hits curse enemies so they take more damage.", strong: "Horde: their curses are much stronger." },
   fighters:  { name: "Fighters",  color: "#dc2626", bonus: { dmg: 0.25 },          desc: "Squad: these towers hit harder." },
   magic:     { name: "Magic",     color: "#a855f7", bonus: { pierceArmor: true },  desc: "Arcane: armour does not soften their hits." },
   townsfolk: { name: "Townsfolk", color: "#eab308", bonus: { rate: 0.15, gold: 1.25 }, desc: "Community: these towers attack a little faster and earn more gold." },
-  plants:    { name: "Plants",    color: "#16a34a", bonus: { imbue: "Nature" },    desc: "Overgrown: their hits root enemies for a moment." },
+  plants:    { name: "Plants",    color: "#16a34a", bonus: { imbue: "Nature" },    desc: "Overgrown: their hits root enemies for a moment.", strong: "Overgrown: their roots hold much longer." },
   machines:  { name: "Machines",  color: "#475569", bonus: { rate: 0.25 },         desc: "Networked: these towers attack faster." },
   music:     { name: "Music",     color: "#ec4899", bonus: { range: 1 },           desc: "Band: these towers reach further." },
   clothing:  { name: "Clothing",  color: "#c084fc", bonus: { dmg: 0.15 },          desc: "Dressed up: these towers hit a little harder." },
   treasure:  { name: "Treasure",  color: "#fbbf24", bonus: { gold: 1.75 },         desc: "Hoard: their kills earn much more gold." },
   buildings: { name: "Buildings", color: "#b45309", bonus: { range: 1 },           desc: "Lookout: these towers reach further." },
-  vehicles:  { name: "Vehicles",  color: "#ef4444", bonus: { knockback: true },    desc: "Ramming: their hits knock enemies back down the path." },
+  vehicles:  { name: "Vehicles",  color: "#ef4444", bonus: { knockback: true },    desc: "Ramming: their hits knock enemies back down the path.", strong: "Ramming: they knock enemies much further back." },
   weather:   { name: "Weather",   color: "#06b6d4", bonus: { status: 1.5 },        desc: "Storm front: their slows, burns, poisons and stuns last longer." },
   household: { name: "Household", color: "#a3a3a3", bonus: { dmg: 0.15 },         desc: "Handy: these towers hit a little harder." },
+};
+
+// Stronger versions. When a tower ALREADY has the effect a combo would give it (a hawk can already
+// hit flyers, a fish already has Water), it gets a stronger version of that effect instead.
+// `strong` in COMBOS above is what players read in that case.
+export const COMBO_STRONGER = {
+  waterPush: 2,            // Sea Creatures: Water knockback distance multiplier
+  flyerDamage: 1.5,        // Birds: damage multiplier against Flying enemies
+  rootTime: 2,             // Plants: root duration multiplier
+  curseBonus: 0.25,        // Monsters: added to the curse damage multiplier (1.25 becomes 1.5)
+  poisonPower: 1.6,        // Bugs: poison damage multiplier
+  slowFactor: 0.7,         // Desserts: slow factor multiplier (smaller = slower enemies)
+  knockback: 1.6,          // Vehicles: Knockback distance multiplier
 };
 
 export const ELEMENT_COLORS = {
