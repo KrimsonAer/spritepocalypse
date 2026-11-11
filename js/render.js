@@ -282,7 +282,7 @@ function rangeRing(g, x, y, range, color) {
 
 function label(g, text, x, y, color, scale = 1) {
   const size = Math.max(9, Math.round(view.cell * 0.34 * scale));
-  g.font = `700 ${size}px "Pixelify Sans", "Courier New", monospace`;
+  g.font = `${Math.round((size) * 1.3)}px "VT323", "Courier New", monospace`;
   g.textAlign = "center"; g.textBaseline = "middle";
   g.lineWidth = Math.max(2, size * 0.28); g.strokeStyle = "#ffffff"; g.lineJoin = "round";
   g.strokeText(text, centre(x), centre(y));
@@ -369,23 +369,23 @@ function drawBigText(g, f) {
   g.textAlign = "center"; g.textBaseline = "middle"; g.lineJoin = "round";
   // shrink long words so they always fit the board
   let size = Math.round(s * 1.25);
-  g.font = `700 ${size}px "Pixelify Sans", "Courier New", monospace`;
+  g.font = `${Math.round((size) * 1.3)}px "VT323", "Courier New", monospace`;
   const width = g.measureText(f.text).width;
-  if (width > w * 0.9) { size = Math.floor(size * (w * 0.9) / width); g.font = `700 ${size}px "Pixelify Sans", "Courier New", monospace`; }
+  if (width > w * 0.9) { size = Math.floor(size * (w * 0.9) / width); g.font = `${Math.round((size) * 1.3)}px "VT323", "Courier New", monospace`; }
   g.lineWidth = Math.max(4, size * 0.22); g.strokeStyle = "#1e293b";
   g.strokeText(f.text, 0, 0);
   g.fillStyle = "#1e293b"; g.fillText(f.text, size * 0.06, size * 0.06);   // hard drop shadow
   g.fillStyle = f.color; g.fillText(f.text, 0, 0);
   if (f.pre) {
     const lead = Math.max(11, Math.round(s * 0.46));
-    g.font = `700 ${lead}px "Pixelify Sans", "Courier New", monospace`;
+    g.font = `${Math.round((lead) * 1.3)}px "VT323", "Courier New", monospace`;
     g.lineWidth = Math.max(3, lead * 0.3); g.strokeStyle = "#ffffff";
     g.strokeText(f.pre, 0, -size * 0.85);
     g.fillStyle = "#1e293b"; g.fillText(f.pre, 0, -size * 0.85);
   }
   if (f.sub) {
     const sub = Math.max(11, Math.round(s * 0.42));
-    g.font = `700 ${sub}px "Pixelify Sans", "Courier New", monospace`;
+    g.font = `${Math.round((sub) * 1.3)}px "VT323", "Courier New", monospace`;
     g.lineWidth = Math.max(3, sub * 0.3); g.strokeStyle = "#ffffff";
     g.strokeText(f.sub, 0, size * 0.85);
     g.fillStyle = "#1e293b"; g.fillText(f.sub, 0, size * 0.85);
@@ -405,10 +405,10 @@ function drawBanner(g) {
   const h = size * (b.tags.length ? 2.9 : 1.8);
   g.fillRect(s * 0.3, s * 1.15, w - s * 0.6, h);
   g.fillStyle = "#fff"; g.textAlign = "center"; g.textBaseline = "middle";
-  g.font = `700 ${size}px "Pixelify Sans", "Courier New", monospace`;
+  g.font = `${Math.round((size) * 1.3)}px "VT323", "Courier New", monospace`;
   g.fillText(fit(g, b.text, w - s), w / 2, s * 1.15 + size * 0.9);
   if (b.tags.length) {
-    g.font = `500 ${Math.round(size * 0.8)}px "Pixelify Sans", "Courier New", monospace`;
+    g.font = `${Math.round((Math.round(size * 0.8)) * 1.3)}px "VT323", "Courier New", monospace`;
     g.fillStyle = "#fde68a";
     g.fillText(fit(g, b.tags.join("  "), w - s), w / 2, s * 1.15 + size * 2.05);
   }

@@ -139,8 +139,10 @@ export function towerTagsFor(subject, caption) {
   const tags = subject.towerTags.slice();
   const elements = ["Physical", "Magic", "Fire", "Ice", "Poison", "Lightning", "Holy", "Dark", "Water", "Nature", "Sonic"];
   const have = tags.filter((t) => elements.includes(t));
+  const support = tags[0] === "Support";
   for (const el of captionElements(subject, caption)) {
     if (have.includes(el) || have.length >= 2) continue;
+    if (support && ["Physical", "Magic", "Holy", "Sonic"].includes(el)) continue;   // nothing to lend
     const at = have.length ? tags.indexOf(have[have.length - 1]) + 1 : 1;
     tags.splice(at, 0, el);
     have.push(el);

@@ -64,7 +64,8 @@ export function initUI() {
     const hint = $("hint");
     hint.style.width = canvas.style.width;
     hint.style.height = hintH + "px";
-    hint.style.fontSize = Math.max(10, Math.round(hudH * 0.25)) + "px";
+    hint.dataset.max = Math.max(13, Math.round(hudH * 0.33));
+    fitHint();
     const hud = $("hud");
     hud.style.width = canvas.style.width;
     hud.style.height = hudH + "px";
@@ -73,7 +74,7 @@ export function initUI() {
     fitAllStats();
   };
   new ResizeObserver(fit).observe($("stage"));
-  if (document.fonts) document.fonts.ready.then(fitAllStats);          // refit once the number font has loaded
+  if (document.fonts) document.fonts.ready.then(() => { fitAllStats(); fitHint(); });          // refit once the number font has loaded
   window.addEventListener("orientationchange", fit);
   fit();
 
@@ -567,6 +568,14 @@ function fitStat(el) {
   }
 }
 
+/** Shrink the controls reminder under the board until it fits its strip. */
+function fitHint() {
+  const el = $("hint");
+  let size = Number(el.dataset.max) || 16;
+  el.style.fontSize = size + "px";
+  while (size > 10 && el.scrollHeight > el.clientHeight + 1) el.style.fontSize = --size + "px";
+}
+
 /** Refit every score bar number (the bar changes size with the window). */
 function fitAllStats() {
   for (const id of ["hud-hearts", "hud-gold", "hud-wave", "hud-score"]) fitStat($(id));
@@ -624,7 +633,7 @@ export function refreshUI() {
   const hint = state.phase === "wave"
     ? "<b>TAP</b> a tower or an enemy to see its tags. Towers can still be bought."
     : "<b>TAP</b> or <b>DRAG</b> to draw blocks. Start on a block to erase. <b>TYPE</b> a word, <b>SELECT</b> the sprite, tap a block.";
-  if (shown.hint !== hint) { shown.hint = hint; $("hint").innerHTML = "<span>" + hint + "</span>"; }
+  if (shown.hint !== hint) { shown.hint = hint; $("hint").innerHTML = "<span>" + hint + "</span>"; fitHint(); }
 
   // incoming enemy group: covers the score bar for a few seconds
   const b = state.banner;

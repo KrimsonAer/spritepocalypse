@@ -21,9 +21,11 @@ html, body {
   margin: 0; height: 100%;
   background: var(--desk);
   color: var(--ink);
-  font-family: "Pixelify Sans", "Courier New", monospace;
-  /* base text size: 16px on a phone, up to 24px on a large monitor */
-  font-size: clamp(16px, calc(0.6vw + 0.9vh + 6px), 24px);
+  /* VT323 everywhere: a pixel font with clear letters and digits. It has one weight, so no fake bold. */
+  font-family: "VT323", "Courier New", monospace;
+  font-synthesis: none;
+  /* base text size: VT323 runs small, so 21px on a phone, up to 31px on a large monitor */
+  font-size: clamp(21px, calc(0.78vw + 1.17vh + 8px), 31px);
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
 }
