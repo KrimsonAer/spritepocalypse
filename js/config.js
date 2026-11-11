@@ -233,7 +233,7 @@ export const COMBOS = {
   food:      { name: "Food",      color: "#f97316", bonus: { dmg: 0.25 },          desc: "Well fed: these towers hit harder." },
   desserts:  { name: "Desserts",  color: "#f472b6", bonus: { slow: true },         desc: "Sugar crash: their hits slow enemies down." },
   drinks:    { name: "Drinks",    color: "#38bdf8", bonus: { rate: 0.25 },         desc: "Caffeinated: these towers attack faster." },
-  blades:    { name: "Blades",    color: "#94a3b8", bonus: { crit: 0.15 },         desc: "Sharpened: more critical hits." },
+  weapons:   { name: "Weapons",   color: "#94a3b8", bonus: { crit: 0.15 },         desc: "Armed: more critical hits." },
   ranged:    { name: "Ranged",    color: "#a16207", bonus: { range: 1 },           desc: "Spotters: these towers reach further." },
   armour:    { name: "Armour",    color: "#64748b", bonus: { blastProof: true },   desc: "Braced: exploding enemies cannot stun these towers." },
   land:      { name: "Land Animals", color: "#84cc16", bonus: { rate: 0.2 },      desc: "Pack hunters: these towers attack faster." },
