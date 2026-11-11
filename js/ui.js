@@ -12,7 +12,7 @@
 // Tags describe themselves on hover (or tap) for locked towers and for enemies.
 // =====================================================================================
 
-import { CONFIG, ELEMENT_COLORS } from "./config.js";
+import { CONFIG, ELEMENT_COLORS, COMBOS } from "./config.js";
 import { db, loadPack, randomSubject, towerTagsFor } from "./data.js";
 import { findSubject, pickDrawing } from "./search.js";
 import { state, cellIndex, newRun, startWave, toggleBlock, placeTower, removeTower, moveTower, refundFor, towerPrice } from "./game.js";
@@ -334,7 +334,10 @@ function showCard() {
     // a Support tower's element is lent to its neighbours, so it gets its own description
     const support = t.stats.shape === "Support";
     const info = (tag) => (support && SUPPORT_ELEMENT_INFO[tag]) || TOWER_TAG_INFO[tag];
-    $("card-tags").innerHTML = t.tags.map((tag) => tagChip(tag, t.locked ? info(tag) : "")).join("");
+    // combos only show here, on a placed tower that is in one (never on the search card)
+    const combos = (t.combos || []).map((cat) => `<span class="tag combo explains" style="--c:${COMBOS[cat].color}" data-tip="${COMBOS[cat].desc}">${COMBOS[cat].name.toUpperCase()} COMBO</span>`).join("");
+    $("card-tags").innerHTML = t.tags.map((tag) => tagChip(tag, t.locked ? info(tag) : "")).join("") + combos;
+    shown.selCombos = (t.combos || []).join(" ");
     $("card-note").textContent = t.locked ? `Locked in. Kills: ${t.kills}. Hover or tap a tag to read it.` : "Not locked yet. Move or remove it for free.";
     if (!t.locked) button(moveMode ? "PICK A BLOCK" : "MOVE", () => { moveMode = !moveMode; showCard(); setMsg(moveMode ? "Tap a free block to move it there." : ""); }, moveMode ? "on" : "");
     button(t.locked ? `SELL +${refundFor(t)}` : "REMOVE", () => { removeTower(t); clearSelection(); }, "danger");
@@ -639,6 +642,8 @@ export function refreshUI() {
   // a selected tower can become locked when the wave starts
   if (view.selected && view.selected.locked !== shown.selLocked) { shown.selLocked = view.selected.locked; showCard(); }
   if (view.selected && !state.towers.includes(view.selected)) clearSelection();
+  // a combo can form or break while a tower is open on the card (a neighbour placed, moved or sold)
+  if (view.selected && (view.selected.combos || []).join(" ") !== shown.selCombos) showCard();
   if (view.selectedEnemy && view.selectedEnemy.dead) { view.selectedEnemy = null; showCard(); }
 
   // controls reminder under the board

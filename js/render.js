@@ -4,7 +4,7 @@
 // Sprites are 16x16 and drawn with smoothing off so they stay crisp at any size.
 // =====================================================================================
 
-import { CONFIG, ELEMENT_COLORS } from "./config.js";
+import { CONFIG, ELEMENT_COLORS, COMBOS } from "./config.js";
 import { state, cellIndex, towerRange, towerStats } from "./game.js";
 
 const B = CONFIG.board;
@@ -156,6 +156,7 @@ export function draw() {
       if (state.blocks[cellIndex(x, y)]) g.drawImage(view.blocks[(x * 7 + y * 13) % view.blocks.length], x * s, y * s, s, s);
     }
   }
+  drawComboBlocks(g);
 
   // hover highlight
   if (view.hover && state.phase !== "menu" && state.phase !== "over") {
@@ -269,6 +270,34 @@ export function draw() {
   }
 
   // (the incoming-group banner now lives in the score bar, see ui.js)
+}
+
+// Combos: the blocks under linked towers take the category's colour and merge into one shape.
+// Each block is filled, and the gap between linked neighbours is filled too (a bridge across the
+// shared edge, or a diamond across the shared corner for diagonal links).
+function drawComboBlocks(g) {
+  const s = view.cell, m = s * 0.07;
+  for (const t of state.towers) {
+    if (!t.combos || !t.combos.length) continue;
+    const color = COMBOS[t.combos[0]].color;
+    g.fillStyle = color;
+    g.globalAlpha = 0.55;
+    g.fillRect(t.x * s + m, t.y * s + m, s - 2 * m, s - 2 * m);
+    for (const link of t.links) {
+      const o = link.to;
+      if (o.id < t.id || link.cat !== t.combos[0]) continue;      // draw each bridge once
+      g.fillStyle = COMBOS[link.cat].color;
+      if (o.x !== t.x && o.y !== t.y) {                        // diagonal: diamond over the shared corner
+        const cx = Math.max(t.x, o.x) * s, cy = Math.max(t.y, o.y) * s, r = m * 2.2;
+        g.beginPath(); g.moveTo(cx, cy - r); g.lineTo(cx + r, cy); g.lineTo(cx, cy + r); g.lineTo(cx - r, cy); g.closePath(); g.fill();
+      } else if (o.x !== t.x) {                                // side by side
+        g.fillRect(Math.max(t.x, o.x) * s - m - 1, t.y * s + m, 2 * m + 2, s - 2 * m);
+      } else {                                                 // one above the other
+        g.fillRect(t.x * s + m, Math.max(t.y, o.y) * s - m - 1, s - 2 * m, 2 * m + 2);
+      }
+    }
+    g.globalAlpha = 1;
+  }
 }
 
 function rangeRing(g, x, y, range, color) {

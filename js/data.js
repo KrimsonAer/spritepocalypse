@@ -32,12 +32,13 @@ export async function loadIndex() {
     else if (t) console.warn("lookup.json is out of date, re-run tools/build_lookup.py");
   }).catch(() => {});
   index.subjects.forEach((row, id) => {
-    const [name, count, t, e] = row;
+    const [name, count, t, e, k] = row;
     const subject = {
       id, name, count,
       words: name.split(" "),
       towerTags: t ? t.split(" ") : [],
       enemyTags: e ? e.split(" ") : [],
+      categories: k ? k.split(" ") : [],     // combo categories (see COMBOS in config.js)
     };
     db.subjects.push(subject);
     db.byName.set(name, subject);

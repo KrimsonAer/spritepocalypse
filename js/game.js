@@ -7,7 +7,7 @@
 // Numbers come from config.js. Tags are explained in GDD.md.
 // =====================================================================================
 
-import { CONFIG, ELEMENT_COLORS } from "./config.js";
+import { CONFIG, ELEMENT_COLORS, COMBOS } from "./config.js";
 import { loadPack, randomSubject, enemyTagsFor } from "./data.js";
 import { pickDrawing } from "./search.js";
 import { sfx } from "./audio.js";
@@ -312,6 +312,7 @@ export function placeTower(x, y, candidate) {
     target: null, beamRamp: 1, beamAcc: 0, beamTarget: null,
     stunUntil: 0, recoil: 0, wavesAlive: 0, kills: 0,
     aura: { dmg: 1, rate: 1, range: 0, imbue: [] },
+    combos: [], combo: noCombo(),   // categories it is in a combo for, and the summed combo bonus
   };
   state.towers.push(tower);
   state.towerAt.set(i, tower);
@@ -383,6 +384,7 @@ export function towerStats(tags) {
 
 /** Support towers boost the 8 blocks around them. Recomputed whenever towers change. */
 export function refreshAuras() {
+  refreshCombos();
   for (const t of state.towers) t.aura = { dmg: 1, rate: 1, range: 0, imbue: [] };
   for (const s of state.towers) {
     if (s.stats.shape !== "Support") continue;
@@ -397,8 +399,67 @@ export function refreshAuras() {
   }
 }
 
-/** Reach of a tower in cells, including Reach auras. */
-export const towerRange = (tower) => tower.stats.range + tower.aura.range;
+/** Reach of a tower in cells, including Reach auras and combo range. */
+export const towerRange = (tower) => tower.stats.range + tower.aura.range + tower.combo.range;
+
+// ------------------------------------------------------------------------------------
+// COMBOS
+// ------------------------------------------------------------------------------------
+
+function noCombo() {
+  return { dmg: 1, rate: 1, range: 0, crit: 0, status: 1, gold: 1, imbue: [], antiAir: false, slow: false, knockback: false, pierceArmor: false, blastProof: false };
+}
+
+let comboPairs = new Set();   // "towerId-towerId-category" for every linked pair, to spot NEW combos
+
+/**
+ * Find every combo. Two towers link when they stand on neighbouring blocks (8 around), share a
+ * category, and are different sprites. Each tower gets each category's bonus once.
+ * New links pop a label between the two towers and play a sound.
+ */
+function refreshCombos() {
+  const pairs = new Set();
+  const fresh = [];
+  for (const t of state.towers) { t.combos = []; t.links = []; }
+  for (let i = 0; i < state.towers.length; i++) {
+    const a = state.towers[i];
+    for (let j = i + 1; j < state.towers.length; j++) {
+      const b = state.towers[j];
+      if (Math.abs(a.x - b.x) > 1 || Math.abs(a.y - b.y) > 1) continue;
+      if (a.subject.name === b.subject.name) continue;          // the same sprite twice is not a combo
+      for (const cat of a.subject.categories) {
+        if (!b.subject.categories.includes(cat) || !COMBOS[cat]) continue;
+        const key = Math.min(a.id, b.id) + "-" + Math.max(a.id, b.id) + "-" + cat;
+        pairs.add(key);
+        if (!comboPairs.has(key)) fresh.push({ a, b, cat });
+        if (!a.combos.includes(cat)) a.combos.push(cat);
+        if (!b.combos.includes(cat)) b.combos.push(cat);
+        a.links.push({ to: b, cat });
+        b.links.push({ to: a, cat });
+      }
+    }
+  }
+  for (const t of state.towers) {
+    const c = noCombo();
+    for (const cat of t.combos) {
+      const bonus = COMBOS[cat].bonus;
+      if (bonus.dmg) c.dmg += bonus.dmg;
+      if (bonus.rate) c.rate += bonus.rate;
+      if (bonus.range) c.range += bonus.range;
+      if (bonus.crit) c.crit += bonus.crit;
+      if (bonus.status) c.status *= bonus.status;
+      if (bonus.gold) c.gold *= bonus.gold;
+      if (bonus.imbue && !c.imbue.includes(bonus.imbue)) c.imbue.push(bonus.imbue);
+      for (const flag of ["antiAir", "slow", "knockback", "pierceArmor", "blastProof"]) if (bonus[flag]) c[flag] = true;
+    }
+    t.combo = c;
+  }
+  for (const { a, b, cat } of fresh) {
+    state.fx.push({ kind: "text", x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 0.35, text: COMBOS[cat].name.toUpperCase() + " COMBO", color: COMBOS[cat].color, scale: 0.85, life: 1.4, max: 1.4 });
+  }
+  if (fresh.length) sfx.combo();
+  comboPairs = pairs;
+}
 
 // ------------------------------------------------------------------------------------
 // WAVES
@@ -630,7 +691,7 @@ function updateEnemy(e, dt) {
 // Can this tower affect this enemy at all? (Flying needs Anti-Air or Sonic, Stealth needs to be close.)
 function canAffect(tower, e, dist) {
   if (e.dead) return false;
-  if (e.flying && !tower.stats.antiAir) return false;
+  if (e.flying && !tower.stats.antiAir && !tower.combo.antiAir) return false;
   if (e.stealth && !tower.stats.holy && dist > E.stealthReveal) return false;
   return true;
 }
@@ -671,7 +732,7 @@ function updateTower(tower, dt) {
     if (target !== tower.beamTarget) { tower.beamTarget = target; tower.beamRamp = 1; }
     const sh = T.shapes.Beam;
     tower.beamRamp = Math.min(sh.rampMax, tower.beamRamp + sh.rampPerSec * dt);
-    tower.beamAcc += dt * tower.aura.rate;
+    tower.beamAcc += dt * tower.aura.rate * tower.combo.rate;
     if (tower.beamAcc >= 0.25) {
       tower.beamAcc -= 0.25;
       applyHit(tower, target, (s.dmg / s.cd) * 0.25 * tower.beamRamp, { sure: true });
@@ -680,7 +741,7 @@ function updateTower(tower, dt) {
     return;
   }
 
-  tower.cd -= dt * tower.aura.rate;
+  tower.cd -= dt * tower.aura.rate * tower.combo.rate;
   if (tower.cd > 0) return;
   const target = pickTarget(tower);
   if (!target) { tower.cd = 0; return; }
@@ -774,14 +835,15 @@ function applyHit(tower, e, dmg, opts) {
     floatText(e.x, e.y - 0.4, "miss", "#94a3b8", 0.7);
     return;
   }
-  let total = dmg * tower.aura.dmg;
+  let total = dmg * tower.aura.dmg * tower.combo.dmg;
   let crit = false;
-  if (s.crit && Math.random() < T.critChance) { total *= T.critMultiplier; crit = true; }
+  const critChance = (s.crit ? T.critChance : 0) + tower.combo.crit;
+  if (critChance > 0 && Math.random() < critChance) { total *= T.critMultiplier; crit = true; }
   let dealt = 0;
   for (const el of s.elems) {
     let part = total / s.elems.length;
     for (const kind of e.kinds) part *= CONFIG.resist[kind][el] ?? 1;
-    if (el === "Physical" && e.armored && !e.shredded) part *= E.armoredPhysical;
+    if (el === "Physical" && e.armored && !e.shredded && !tower.combo.pierceArmor) part *= E.armoredPhysical;
     dealt += part;
   }
   if (state.time < e.curseUntil) dealt *= CONFIG.elements.Dark.curse;
@@ -814,34 +876,36 @@ function applyStatuses(tower, e, dealt) {
   const s = tower.stats;
   const C = CONFIG.elements;
   const now = state.time;
-  for (const el of s.elems.concat(tower.aura.imbue)) {
+  const m = tower.combo.status;                   // Weather combo: effects last longer
+  const lent = tower.aura.imbue.concat(tower.combo.imbue.filter((el) => !tower.aura.imbue.includes(el)));
+  for (const el of s.elems.concat(lent.filter((el) => !s.elems.includes(el)))) {
     if (el === "Fire" && !e.kinds.includes("Fire")) {
       const dps = (dealt * C.Fire.burnShare) / C.Fire.burnTime;
-      if (!e.burn || dps >= e.burn.dps) e.burn = { dps, until: now + C.Fire.burnTime, color: ELEMENT_COLORS.Fire };
+      if (!e.burn || dps >= e.burn.dps) e.burn = { dps, until: now + C.Fire.burnTime * m, color: ELEMENT_COLORS.Fire };
     } else if (el === "Ice" && !e.kinds.includes("Ice")) {
-      slowEnemy(e, C.Ice.slow, C.Ice.time);
+      slowEnemy(e, C.Ice.slow, C.Ice.time * m);
     } else if (el === "Poison" && !e.kinds.includes("Poison") && !e.kinds.includes("Machine")) {
       const dps = (dealt * C.Poison.share) / C.Poison.time;
       const stacks = Math.min(C.Poison.maxStacks, (e.poison ? e.poison.stacks : 0) + 1);
-      e.poison = { dps: Math.max(dps, e.poison ? e.poison.dps : 0), stacks, until: now + C.Poison.time, color: ELEMENT_COLORS.Poison };
+      e.poison = { dps: Math.max(dps, e.poison ? e.poison.dps : 0), stacks, until: now + C.Poison.time * m, color: ELEMENT_COLORS.Poison };
     } else if (el === "Lightning") {
-      if (Math.random() < C.Lightning.stunChance) stunEnemy(e, C.Lightning.stunTime);
+      if (Math.random() < C.Lightning.stunChance) stunEnemy(e, C.Lightning.stunTime * m);
     } else if (el === "Dark") {
-      e.curseUntil = now + C.Dark.time;
+      e.curseUntil = now + C.Dark.time * m;
     } else if (el === "Water") {
       pushEnemy(e, C.Water.knockback);
     } else if (el === "Nature" && now > e.rootImmuneUntil && !e.unstoppable) {
-      stunEnemy(e, C.Nature.root);
+      stunEnemy(e, C.Nature.root * m);
       e.rootImmuneUntil = now + C.Nature.cooldown;
     }
   }
-  if (s.stun && Math.random() < T.stunChance) stunEnemy(e, T.stunTime);
-  if (s.slow) slowEnemy(e, T.slowFactor, T.slowTime);
+  if (s.stun && Math.random() < T.stunChance) stunEnemy(e, T.stunTime * m);
+  if (s.slow || tower.combo.slow) slowEnemy(e, T.slowFactor, T.slowTime * m);
   if (s.bleed) {
     const dps = (dealt * T.bleedShare) / T.bleedTime;
-    if (!e.bleed || dps >= e.bleed.dps) e.bleed = { dps, until: now + T.bleedTime, color: "#dc2626" };
+    if (!e.bleed || dps >= e.bleed.dps) e.bleed = { dps, until: now + T.bleedTime * m, color: "#dc2626" };
   }
-  if (s.knockback) pushEnemy(e, T.knockback);
+  if (s.knockback || tower.combo.knockback) pushEnemy(e, T.knockback);
   if (s.shred) e.shredded = true;
 }
 
@@ -886,6 +950,7 @@ function killEnemy(e, tower) {
   let gold = R.killGold + R.killGoldPerWave * (state.wave - 1);
   if (e.rich) gold *= R.richMultiplier;
   if (tower && tower.stats.gold) gold *= R.goldTagKillMultiplier;
+  if (tower) gold *= tower.combo.gold;                 // Treasure and Townsfolk combos
   if (e.child) gold /= 3;
   if (e.boss) gold *= CONFIG.boss.gold;
   gold = Math.max(1, Math.round(gold));
@@ -919,7 +984,7 @@ function killEnemy(e, tower) {
   if (e.explosive) {
     state.fx.push({ kind: "ring", x: e.x, y: e.y, r: E.explodeRange, color: "#f97316", life: 0.4, max: 0.4 });
     for (const t of state.towers) {
-      if (Math.hypot(t.x - e.x, t.y - e.y) <= E.explodeRange) t.stunUntil = state.time + E.explodeStun;
+      if (Math.hypot(t.x - e.x, t.y - e.y) <= E.explodeRange && !t.combo.blastProof) t.stunUntil = state.time + E.explodeStun;
     }
     sfx.boom();
   }

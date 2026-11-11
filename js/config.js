@@ -214,6 +214,47 @@ export const CONFIG = {
 };
 
 // Colours used for tags, projectiles and damage numbers.
+// =====================================================================================
+// COMBOS
+// Two towers of the same category on neighbouring blocks (all 8 around, diagonals too) form a combo.
+// Both get that category's bonus once, however long the chain. The same sprite twice does not count
+// (two "husky" towers), but different sprites of a category do (a husky and a poodle).
+// Which sprites belong to which category is decided in tools/classify.py (CATEGORY_CLASSES).
+//
+// Bonus fields (any mix):
+//   dmg: +share of damage       rate: +share of attack speed     range: +cells of reach
+//   crit: +crit chance           status: x duration of slows, stuns, burns, poison, curses
+//   gold: x gold from its kills  imbue: element effect added to its hits
+//   antiAir: can hit flyers       slow / knockback: its hits slow / shove enemies
+//   pierceArmor: Armored does not halve its Physical damage    blastProof: Explosive enemies cannot stun it
+// `desc` is what players read when they inspect a tower in a combo. No numbers, by design.
+// =====================================================================================
+export const COMBOS = {
+  food:      { name: "Food",      color: "#f97316", bonus: { dmg: 0.25 },          desc: "Well fed: these towers hit harder." },
+  desserts:  { name: "Desserts",  color: "#f472b6", bonus: { slow: true },         desc: "Sugar crash: their hits slow enemies down." },
+  drinks:    { name: "Drinks",    color: "#38bdf8", bonus: { rate: 0.25 },         desc: "Caffeinated: these towers attack faster." },
+  blades:    { name: "Blades",    color: "#94a3b8", bonus: { crit: 0.15 },         desc: "Sharpened: more critical hits." },
+  ranged:    { name: "Ranged",    color: "#a16207", bonus: { range: 1 },           desc: "Spotters: these towers reach further." },
+  armour:    { name: "Armour",    color: "#64748b", bonus: { blastProof: true },   desc: "Braced: exploding enemies cannot stun these towers." },
+  land:      { name: "Land Animals", color: "#84cc16", bonus: { rate: 0.2 },      desc: "Pack hunters: these towers attack faster." },
+  sea:       { name: "Sea Creatures", color: "#0ea5e9", bonus: { imbue: "Water" }, desc: "Tidal: their hits knock enemies back down the path." },
+  birds:     { name: "Birds",     color: "#facc15", bonus: { antiAir: true },      desc: "Flock: these towers can hit flying enemies." },
+  bugs:      { name: "Bugs",      color: "#65a30d", bonus: { imbue: "Poison" },    desc: "Swarm: their hits poison enemies." },
+  monsters:  { name: "Monsters",  color: "#7c3aed", bonus: { imbue: "Dark" },      desc: "Horde: their hits curse enemies so they take more damage." },
+  fighters:  { name: "Fighters",  color: "#dc2626", bonus: { dmg: 0.25 },          desc: "Squad: these towers hit harder." },
+  magic:     { name: "Magic",     color: "#a855f7", bonus: { pierceArmor: true },  desc: "Arcane: armour does not soften their hits." },
+  townsfolk: { name: "Townsfolk", color: "#eab308", bonus: { rate: 0.15, gold: 1.25 }, desc: "Community: these towers attack a little faster and earn more gold." },
+  plants:    { name: "Plants",    color: "#16a34a", bonus: { imbue: "Nature" },    desc: "Overgrown: their hits root enemies for a moment." },
+  machines:  { name: "Machines",  color: "#475569", bonus: { rate: 0.25 },         desc: "Networked: these towers attack faster." },
+  music:     { name: "Music",     color: "#ec4899", bonus: { range: 1 },           desc: "Band: these towers reach further." },
+  clothing:  { name: "Clothing",  color: "#c084fc", bonus: { dmg: 0.15 },          desc: "Dressed up: these towers hit a little harder." },
+  treasure:  { name: "Treasure",  color: "#fbbf24", bonus: { gold: 1.75 },         desc: "Hoard: their kills earn much more gold." },
+  buildings: { name: "Buildings", color: "#b45309", bonus: { range: 1 },           desc: "Lookout: these towers reach further." },
+  vehicles:  { name: "Vehicles",  color: "#ef4444", bonus: { knockback: true },    desc: "Ramming: their hits knock enemies back down the path." },
+  weather:   { name: "Weather",   color: "#06b6d4", bonus: { status: 1.5 },        desc: "Storm front: their slows, burns, poisons and stuns last longer." },
+  household: { name: "Household", color: "#a3a3a3", bonus: { dmg: 0.15 },         desc: "Handy: these towers hit a little harder." },
+};
+
 export const ELEMENT_COLORS = {
   Physical: "#6b7280", Magic: "#a855f7", Fire: "#f97316", Ice: "#38bdf8", Poison: "#84cc16",
   Lightning: "#facc15", Holy: "#fde68a", Dark: "#7c3aed", Water: "#3b82f6", Nature: "#22c55e", Sonic: "#f472b6",
