@@ -315,6 +315,7 @@ export const COMBOS = {
   weather:   { name: "Weather",   color: "#06b6d4", bonus: { status: 1.5 },        desc: "Storm front: their slows, burns, poisons and stuns last longer." },
   household: { name: "Household", color: "#a3a3a3", bonus: { dmg: 0.15 },         desc: "Handy: these towers hit a little harder." },
   // added 2026-11-12
+  cosmos:    { name: "Cosmos",    color: "#4338ca", bonus: { pull: 0.4 },           desc: "Gravity: their hits pull enemies towards them.", strong: "Gravity: their hits pull enemies much harder." },
   rocks:     { name: "Rocks",     color: "#78716c", bonus: { stunChance: 0.12 },    desc: "Rock solid: their hits sometimes stun.", strong: "Rock solid: their hits stun much more often." },
   sports:    { name: "Sports",    color: "#0891b2", bonus: { rate: 0.15, range: 0.5 }, desc: "Training: these towers attack a little faster and reach a little further." },
   toys:      { name: "Toys",      color: "#f472b6", bonus: { confuseChance: 0.15 }, desc: "Playtime: their hits sometimes send enemies wandering backwards.", strong: "Playtime: their hits confuse enemies much more often." },
@@ -347,7 +348,7 @@ export const THEMES = {
   graveyard:  { name: "Graveyard",  color: "#7c3aed", n: { radius: 0.9, time: 5 },             desc: "Haunting: enemies they kill leave a haunted spot that curses anything walking through it." },
   pirate:     { name: "Pirate Ship", color: "#a16207", n: { chance: 0.25, gold: 5 },           desc: "Plunder: kills sometimes drop a whole chest of gold." },
   circus:     { name: "Circus",     color: "#ec4899", n: { share: 0.7, range: 2.5 },           desc: "Juggling act: their shots bounce on to another enemy." },
-  hospital:   { name: "Hospital",   color: "#ef4444", n: { hearts: 1 },                       desc: "Triage: gives you back a heart at the end of every wave." },
+  hospital:   { name: "Hospital",   color: "#ef4444", n: { hearts: 1, healPerExtra: 2 },      desc: "Triage: gives you back a heart at the end of every other wave, more with more healers in it." },
   castle:     { name: "Castle",     color: "#64748b", n: { range: 1 },                        desc: "Fortress: nothing can stun or frighten these towers, and they see further." },
   beach:      { name: "Beach",      color: "#0ea5e9", n: { every: 10, radius: 2, cells: 1 },   desc: "High tide: every so often a wave washes nearby enemies back down the path." },
   space:      { name: "Space",      color: "#1e40af", n: { chance: 0.25, time: 1 },            desc: "Zero gravity: hits sometimes float enemies off the ground, and these towers can hit flyers." },

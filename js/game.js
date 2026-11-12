@@ -549,9 +549,14 @@ function themesEndWave() {
       const gold = kills * THEMES.farm.n.goldPerKill;
       if (gold) { state.gold += gold; floatText(cx, cy - 0.5, `HARVEST +${gold}`, THEMES.farm.color, 0.9); }
     }
-    if (g.id === "hospital" && state.hearts < CONFIG.run.hearts) {
-      state.hearts = Math.min(CONFIG.run.hearts, state.hearts + THEMES.hospital.n.hearts);
-      floatText(cx, cy - 0.5, "+1 heart", THEMES.hospital.color, 0.9);
+    if (g.id === "hospital" && state.wave % 2 === 1 && state.hearts < CONFIG.run.hearts) {   // odd waves only
+      // 1 heart, plus 1 more for every `healPerExtra` Heal towers in the group
+      const n = THEMES.hospital.n;
+      const healers = g.towers.filter((t) => t.stats.heal).length;
+      const gain = n.hearts + Math.floor(healers / n.healPerExtra);
+      const before = state.hearts;
+      state.hearts = Math.min(CONFIG.run.hearts, state.hearts + gain);
+      floatText(cx, cy - 0.5, `+${state.hearts - before} heart${state.hearts - before === 1 ? "" : "s"}`, THEMES.hospital.color, 0.9);
     }
   }
   for (const t of state.towers) if (hasTheme(t, "school")) t.study = Math.min(THEMES.school.n.max, (t.study || 0) + THEMES.school.n.perWave);
@@ -678,6 +683,7 @@ function refreshCombos() {
       // chance-based bonuses (Rocks, Toys, Signs): doubled if the tower already does that thing
       if (bonus.stunChance) { c.stunChance = bonus.stunChance * (t.stats.stun ? 2 : 1); if (t.stats.stun) c.strong.push(cat); }
       if (bonus.confuseChance) { c.confuseChance = bonus.confuseChance * (t.stats.confuse ? 2 : 1); if (t.stats.confuse) c.strong.push(cat); }
+      if (bonus.pull) { c.pull = bonus.pull * (t.stats.magnet ? 2 : 1); if (t.stats.magnet) c.strong.push(cat); }
       if (bonus.markChance) { c.markChance = bonus.markChance * (t.stats.tasty ? 2 : 1); if (t.stats.tasty) c.strong.push(cat); }
       // Already has the effect this combo gives? Then it gets the stronger version instead.
       const X = COMBO_STRONGER, own = t.stats;
@@ -886,7 +892,8 @@ function endWave() {
       state.gold += CONFIG.run.goldSupportPerWave;
       floatText(tower.x, tower.y - 0.3, `+${CONFIG.run.goldSupportPerWave}`, "#ca8a04");
     }
-    if (tower.stats.heal && tower.wavesAlive % CONFIG.run.healEveryWaves === 0 && state.hearts < CONFIG.run.hearts) {
+    // Heal towers in a Hospital theme do not heal on their own: the theme pays instead (no stacking)
+    if (tower.stats.heal && !hasTheme(tower, "hospital") && tower.wavesAlive % CONFIG.run.healEveryWaves === 0 && state.hearts < CONFIG.run.hearts) {
       state.hearts++;
       floatText(tower.x, tower.y - 0.3, "+1 heart", "#e11d48");
     }
@@ -1545,6 +1552,7 @@ function applyStatuses(tower, e, dealt) {
   if (tower.combo.confuseChance && !e.unstoppable && !e.flying && now >= e.confuseImmuneUntil && Math.random() < tower.combo.confuseChance) {   // Toys combo
     e.confuseUntil = now + X.confuseTime; e.confuseImmuneUntil = now + X.confuseTime + X.confuseImmune;
   }
+  if (tower.combo.pull) pullEnemy(e, tower, tower.combo.pull);                                           // Cosmos combo
   if (tower.combo.markChance && Math.random() < tower.combo.markChance) e.markUntil = Math.max(e.markUntil, now + X.tastyTime);   // Signs combo
   if (s.shred) e.shredded = true;
   // special tags
