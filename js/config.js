@@ -324,11 +324,11 @@ export const COMBOS = {
 
 // Bigger combos. A combo of 3, 4 or 5 linked towers gives each tower in it a bigger bonus.
 // Number bonuses (damage, speed, range, crit, gold, Weather's longer effects, chance bonuses) grow by
-// bonusPerExtra of the normal bonus for every tower past 2: 0.5 = 3 towers x1.5, 4 towers x2, 5 towers x2.5.
+// bonusPerExtra of the normal bonus for every tower past 2: 0.5 = 3 towers x1.5, 4 towers x2 ... 15 towers x7.5.
 // On/off bonuses (Water, Poison, anti-air, armour piercing...) can't grow, so those combos give
 // damagePerExtra extra damage per tower past 2 instead (0.1 = +10% at 3 towers, +30% at 5).
 export const COMBO_SIZE = {
-  maxTowers: 5,          // towers past this count add nothing more
+  maxTowers: 15,         // towers past this count add nothing more (the card shows COMBO +2 up to +15)
   bonusPerExtra: 0.5,
   damagePerExtra: 0.1,
   chanceCap: 0.9,        // chance bonuses (stun, confuse, pull, mark) never go above this

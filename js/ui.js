@@ -12,7 +12,7 @@
 // Tags describe themselves on hover (or tap) for locked towers and for enemies.
 // =====================================================================================
 
-import { CONFIG, ELEMENT_COLORS, COMBOS, THEMES } from "./config.js";
+import { CONFIG, ELEMENT_COLORS, COMBOS, COMBO_SIZE, THEMES } from "./config.js";
 import { db, loadPack, randomSubject, towerTagsFor } from "./data.js";
 import { findSubject, pickDrawing } from "./search.js";
 import { state, cellIndex, newRun, startWave, toggleBlock, placeTower, removeTower, moveTower, refundFor, towerPrice } from "./game.js";
@@ -236,6 +236,16 @@ function setArmed(on) {
 }
 
 // Fill a menu's decoration strips with random sprites, different every time it opens.
+/** Tooltip line for a combo's size: what the extra towers add (matches refreshCombos in game.js). */
+function comboSizeNote(cat, size) {
+  const extra = Math.max(0, Math.min(size, COMBO_SIZE.maxTowers) - 2);
+  if (!extra) return `${size} towers linked: link more for a bigger bonus.`;
+  const b = COMBOS[cat].bonus;
+  const grows = ["dmg", "rate", "range", "crit", "status", "gold", "stunChance", "confuseChance", "pull", "markChance"].some((f) => b[f]);
+  const boost = grows ? `bonus x${(1 + extra * COMBO_SIZE.bonusPerExtra).toFixed(1)}` : `+${Math.round(extra * COMBO_SIZE.damagePerExtra * 100)}% damage`;
+  return `${size} towers linked: ${boost}` + (size >= COMBO_SIZE.maxTowers ? " (max)." : ".");
+}
+
 /** Run-over scoreboard: the 5 towers that dealt the most damage (sold ones included), then every combo and theme found. */
 function fillScoreboard() {
   const best = state.towers.concat(state.retired || []).filter((t) => t.damage > 0)
@@ -410,11 +420,16 @@ function showCard() {
     const support = t.stats.shape === "Support";
     const info = (tag) => (support && SUPPORT_ELEMENT_INFO[tag]) || TOWER_TAG_INFO[tag];
     // combos only show here, on a placed tower that is in one (never on the search card)
-    const combos = (t.combos || []).map((cat) => `<span class="tag combo explains" style="--c:${COMBOS[cat].color}" data-tip="${(t.combo.strong || []).includes(cat) && COMBOS[cat].strong ? COMBOS[cat].strong : COMBOS[cat].desc}">${COMBOS[cat].name.toUpperCase()} COMBO</span>`).join("");
+    // +N = how many towers are linked in the combo (bigger combos give a bigger bonus, COMBO_SIZE in config.js)
+    const combos = (t.combos || []).map((cat) => {
+      const size = t.comboSize || 2;
+      const tip = ((t.combo.strong || []).includes(cat) && COMBOS[cat].strong ? COMBOS[cat].strong : COMBOS[cat].desc) + " " + comboSizeNote(cat, size);
+      return `<span class="tag combo explains" style="--c:${COMBOS[cat].color}" data-tip="${tip}">${COMBOS[cat].name.toUpperCase()} COMBO +${size}</span>`;
+    }).join("");
     // themes show the same way, as an outlined chip (themes outline, combos fill)
     const themes = (t.themes || []).map((id) => `<span class="tag theme explains" style="--c:${THEMES[id].color}" data-tip="${THEMES[id].desc}">${THEMES[id].name.toUpperCase()} THEME</span>`).join("");
     $("card-tags").innerHTML = t.tags.map((tag) => tagChip(tag, t.locked ? info(tag) : "")).join("") + combos + themes;
-    shown.selCombos = (t.combos || []).join(" ") + "|" + (t.themes || []).join(" ");
+    shown.selCombos = (t.combos || []).join(" ") + (t.comboSize || "") + "|" + (t.themes || []).join(" ");
     const copying = t.tags.includes("Copycat") ? (t.copying ? `Copying the ${t.copying.subject.name}. ` : "Nothing next to it to copy. ") : "";
     $("card-note").textContent = copying + (t.locked ? `Locked in. Kills: ${t.kills}. Hover or tap a tag to read it.` : "Not locked yet. Move or remove it for free.");
     if (!t.locked) button(moveMode ? "PICK A BLOCK" : "MOVE", () => { moveMode = !moveMode; showCard(); setMsg(moveMode ? "Tap a free block to move it there." : ""); }, moveMode ? "on" : "");
@@ -726,7 +741,7 @@ export function refreshUI() {
   if (view.selected && view.selected.locked !== shown.selLocked) { shown.selLocked = view.selected.locked; showCard(); }
   if (view.selected && !state.towers.includes(view.selected)) clearSelection();
   // a combo can form or break while a tower is open on the card (a neighbour placed, moved or sold)
-  if (view.selected && (view.selected.combos || []).join(" ") + "|" + (view.selected.themes || []).join(" ") !== shown.selCombos) showCard();
+  if (view.selected && (view.selected.combos || []).join(" ") + (view.selected.comboSize || "") + "|" + (view.selected.themes || []).join(" ") !== shown.selCombos) showCard();
   if (view.selectedEnemy && view.selectedEnemy.dead) { view.selectedEnemy = null; showCard(); }
 
   // free towers left (the first 5 of a run cost nothing)
