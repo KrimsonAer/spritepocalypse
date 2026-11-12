@@ -339,3 +339,40 @@ canvas, .sprite { image-rendering: pixelated; image-rendering: crisp-edges; }
 .free-pips i.on { background: #22c55e; }
 .free b { font-size: 1.5em; font-weight: 400; line-height: 1; }
 .free.pop { animation: stat-glow 0.32s steps(4); }
+
+/* ---------------------------------------------------------------- phones and tall screens
+   ui.js puts the wave controls in a bar under the board ("bottom") or in a column beside it ("side"),
+   whichever leaves the bigger squares, and squeezes the panel so the board gets the space. */
+#app.compact #stage { padding: 4px; gap: 6px; }
+#controls.bottom {
+  display: flex; gap: 0.25em; align-items: stretch;
+  padding: 0.2em; background: var(--ink); border-top: var(--px) solid #0f172a;
+}
+#controls.bottom .px-btn { font-size: 1em; padding: 0 0.45em; }
+#controls.bottom #btn-start { font-size: 1.15em; }
+#controls.side {
+  display: flex; flex-direction: column; gap: 0.3em; align-self: center;
+}
+#controls.side #btn-start { flex: 1; width: 100%; white-space: normal; line-height: 1.05; padding: 0.3em 0.15em; font-size: 1.1em; }
+#controls.side .speed { flex-direction: column; }
+#controls.side .speed .px-btn { margin: calc(var(--px) * -1) 0 0 0; padding: 0.35em 0; }
+#controls.side .speed .px-btn:first-child { margin-top: 0; }
+#controls.side #btn-pause { padding: 0.35em 0; }
+#app.compact #panel { font-size: 0.82em; gap: 0.3em; padding: 0.35em 0.4em; }
+#app.compact .card { min-height: 4.8em; padding: 0.3em; }
+#app.compact .card .sprite { width: 3.2em; height: 3.2em; }
+#app.compact .card-name { font-size: 1.05em; }
+#app.compact .free { padding: 0.1em 0.45em; }
+#app.compact #msg { min-height: 2.3em; line-height: 1.15; }
+#msg.hinting { color: #64748b; }
+#msg.hinting b { color: #b45309; font-weight: 400; }
+
+.info-row { display: flex; flex-direction: column; gap: 0.4em; }
+#app.compact .info-row { flex-direction: row-reverse; align-items: center; gap: 0.4em; }
+#app.compact .info-row #msg { flex: 1; min-width: 0; }
+#app.compact .free { flex: none; gap: 0.3em; }
+#app.compact .free-label { font-size: 0.85em; }
+#app.compact .free-pips { flex: none; }
+#app.compact .card { min-height: 4em; }
+#app.compact .card .sprite { width: 2.8em; height: 2.8em; }
+#app.compact .card-empty { font-size: 0.8em; }

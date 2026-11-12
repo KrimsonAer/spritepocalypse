@@ -46,9 +46,12 @@
         <input id="search" type="text" inputmode="text" enterkeyhint="go" placeholder="Type anything: wizard hat, cat..." autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40">
         <button type="submit" class="px-btn">SPAWN</button>
       </form>
-      <!-- free towers left: shown until the free ones are used up -->
-      <div id="free" class="free hidden"><span class="free-label">FREE TOWERS</span><span id="free-pips" class="free-pips"></span><b id="free-count"></b></div>
-      <div id="msg" role="status"></div>
+      <!-- free towers counter and message line: stacked on wide screens, side by side on phones -->
+      <div class="info-row">
+        <!-- free towers left: shown until the free ones are used up -->
+        <div id="free" class="free hidden"><span class="free-label">FREE TOWERS</span><span id="free-pips" class="free-pips"></span><b id="free-count"></b></div>
+        <div id="msg" role="status"></div>
+      </div>
 
       <!-- Always takes up the same space, so the board never jumps when a sprite appears -->
       <div id="card" class="card empty">

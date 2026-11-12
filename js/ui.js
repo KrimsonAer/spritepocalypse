@@ -56,28 +56,54 @@ export function initUI() {
 
   // Keep the board fitted to its container. The score bar sits on top of the board, matches its
   // width, and grows with it so the numbers stay easy to read on any screen.
+  //
+  // Three layouts:
+  //   wide     (landscape screens): wave controls in the side panel, controls reminder under the board
+  //   bottom   (phones): wave controls in a bar under the board, reminder moves into the message line
+  //   side     (tall screens with room to spare): wave controls in a column beside the board
+  // On narrow screens "bottom" and "side" are both measured and whichever gives bigger squares wins.
   const fit = () => {
     const st = $("stage");
-    const availW = st.clientWidth - 18, availH = st.clientHeight - 18;
+    const wide = window.matchMedia("(min-width: 760px) and (min-aspect-ratio: 1/1)").matches;
+    $("app").classList.toggle("compact", !wide);
+    const availW = st.clientWidth - 12, availH = st.clientHeight - 12;
     const hudH = Math.max(40, Math.min(110, Math.round(Math.min(availH * 0.085, availW * 0.15))));
-    const hintH = Math.round(hudH * 0.72);        // free towers left (the first 5 of a run cost nothing)
-  const free = state.phase === "build" || state.phase === "wave" ? state.freeTowers : 0;
-  if (shown.free !== free) {
-    const was = shown.free;
-    shown.free = free;
-    $("free").classList.toggle("hidden", free <= 0);
-    $("free-count").textContent = free;
-    $("free-pips").innerHTML = Array.from({ length: CONFIG.run.freeTowers }, (_, i) => `<i class="${i < free ? "on" : ""}"></i>`).join("");
-    if (was !== undefined && free < was) kick($("free"), "pop");
-  }
-
-  // controls reminder under the board
-    resize(canvas, availW, availH - hudH - hintH);
+    const controls = $("controls");
     const hint = $("hint");
-    hint.style.width = canvas.style.width;
-    hint.style.height = hintH + "px";
-    hint.dataset.max = Math.max(13, Math.round(hudH * 0.33));
-    fitHint();
+    let mode = "wide";
+    const ctrlH = Math.max(44, Math.round(hudH * 0.95));            // bottom bar height
+    const sideW = Math.max(66, Math.round(hudH * 1.45));             // side column width
+    if (!wide) {
+      const cellBottom = Math.min(availW / 9, (availH - hudH - ctrlH) / 13);
+      const cellSide = Math.min((availW - sideW - 6) / 9, (availH - hudH) / 13);
+      mode = cellSide > cellBottom + 0.5 ? "side" : "bottom";
+    }
+    controls.classList.toggle("bottom", mode === "bottom");
+    controls.classList.toggle("side", mode === "side");
+    if (mode === "wide" && controls.parentElement !== $("panel")) $("panel").appendChild(controls);
+    if (mode === "bottom" && controls.parentElement !== $("boardwrap")) $("boardwrap").appendChild(controls);
+    if (mode === "side" && controls.parentElement !== st) st.appendChild(controls);
+    hint.classList.toggle("hidden", mode !== "wide");
+
+    if (mode === "wide") {
+      const hintH = Math.round(hudH * 0.72);        // controls reminder under the board
+      resize(canvas, availW, availH - hudH - hintH);
+      hint.style.width = canvas.style.width;
+      hint.style.height = hintH + "px";
+      hint.dataset.max = Math.max(13, Math.round(hudH * 0.33));
+      fitHint();
+      controls.style.width = controls.style.height = controls.style.fontSize = "";
+    } else if (mode === "bottom") {
+      resize(canvas, availW, availH - hudH - ctrlH);
+      controls.style.width = canvas.style.width;
+      controls.style.height = ctrlH + "px";
+      controls.style.fontSize = Math.round(ctrlH * 0.36) + "px";
+    } else {
+      resize(canvas, availW - sideW - 6, availH - hudH);
+      controls.style.width = sideW + "px";
+      controls.style.height = parseFloat(canvas.style.height) + hudH + "px";
+      controls.style.fontSize = Math.round(sideW * 0.24) + "px";
+    }
     const hud = $("hud");
     hud.style.width = canvas.style.width;
     hud.style.height = hudH + "px";
@@ -368,12 +394,17 @@ function clearSelection() {
   showCard();
 }
 
+let msgActive = false;     // true while the message line shows a real message (not the controls reminder)
+
 function setMsg(text, bad = false) {
   const el = $("msg");
   el.textContent = text;
   el.classList.toggle("bad", bad);
+  el.classList.remove("hinting");
+  msgActive = !!text;
+  shown.msgHint = null;
   clearTimeout(msgTimer);
-  if (text) msgTimer = setTimeout(() => { el.textContent = ""; }, 4500);
+  if (text) msgTimer = setTimeout(() => { el.textContent = ""; msgActive = false; shown.msgHint = null; }, 4500);
 }
 
 // ---- tag description bubble ----
@@ -658,11 +689,30 @@ export function refreshUI() {
   if (view.selected && (view.selected.combos || []).join(" ") !== shown.selCombos) showCard();
   if (view.selectedEnemy && view.selectedEnemy.dead) { view.selectedEnemy = null; showCard(); }
 
-  // controls reminder under the board
+  // free towers left (the first 5 of a run cost nothing)
+  const free = state.phase === "build" || state.phase === "wave" ? state.freeTowers : 0;
+  if (shown.free !== free) {
+    const was = shown.free;
+    shown.free = free;
+    $("free").classList.toggle("hidden", free <= 0);
+    $("free-count").textContent = free;
+    $("free-pips").innerHTML = Array.from({ length: CONFIG.run.freeTowers }, (_, i) => `<i class="${i < free ? "on" : ""}"></i>`).join("");
+    if (was !== undefined && free < was) kick($("free"), "pop");
+  }
+
+  // controls reminder: under the board on wide screens, in the message line on phones
   const hint = state.phase === "wave"
     ? "<b>TAP</b> a tower or an enemy to see its tags. Towers can still be bought."
     : "<b>TAP</b> or <b>DRAG</b> to draw blocks. Start on a block to erase. <b>TYPE</b> a word, <b>SELECT</b> the sprite, tap a block." + RIGHT_CLICK_HINT;
-  if (shown.hint !== hint) { shown.hint = hint; $("hint").innerHTML = "<span>" + hint + "</span>"; fitHint(); }
+  if (shown.hint !== hint) { shown.hint = hint; $("hint").innerHTML = "<span>" + hint + "</span>"; fitHint(); shown.msgHint = null; }
+  const compact = $("app").classList.contains("compact");
+  if (compact && !msgActive && shown.msgHint !== hint) {
+    shown.msgHint = hint;
+    const m = $("msg");
+    m.innerHTML = hint;
+    m.classList.remove("bad");
+    m.classList.add("hinting");
+  }
 
   // incoming enemy group: covers the score bar for a few seconds
   const b = state.banner;
