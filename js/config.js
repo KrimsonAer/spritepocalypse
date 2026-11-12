@@ -322,6 +322,18 @@ export const COMBOS = {
   symbols:   { name: "Signs",     color: "#eab308", bonus: { markChance: 0.2 },     desc: "Marked: their hits sometimes mark enemies to take extra damage.", strong: "Marked: their hits mark enemies much more often." },
 };
 
+// Bigger combos. A combo of 3, 4 or 5 linked towers gives each tower in it a bigger bonus.
+// Number bonuses (damage, speed, range, crit, gold, Weather's longer effects, chance bonuses) grow by
+// bonusPerExtra of the normal bonus for every tower past 2: 0.5 = 3 towers x1.5, 4 towers x2, 5 towers x2.5.
+// On/off bonuses (Water, Poison, anti-air, armour piercing...) can't grow, so those combos give
+// damagePerExtra extra damage per tower past 2 instead (0.1 = +10% at 3 towers, +30% at 5).
+export const COMBO_SIZE = {
+  maxTowers: 5,          // towers past this count add nothing more
+  bonusPerExtra: 0.5,
+  damagePerExtra: 0.1,
+  chanceCap: 0.9,        // chance bonuses (stun, confuse, pull, mark) never go above this
+};
+
 // Stronger versions. When a tower ALREADY has the effect a combo would give it (a hawk can already
 // hit flyers, a fish already has Water), it gets a stronger version of that effect instead.
 // `strong` in COMBOS above is what players read in that case.

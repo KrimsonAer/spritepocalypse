@@ -134,6 +134,16 @@ export function randomSubject() {
  * Elements a single drawing gains from its caption ("flaming", "frozen", ...).
  * Words that are already part of the subject name do not count, the subject tags cover those.
  */
+/**
+ * Combo categories for one drawing: the subject's own, plus Arcane (id "magic") when the caption says
+ * the drawing is magical ("enchanted cloak", "glowing sword"). Three at most.
+ */
+export function categoriesFor(subject, caption) {
+  const cats = subject.categories.slice();
+  if (!cats.includes("magic") && captionElements(subject, caption).includes("Magic")) cats.push("magic");
+  return cats.slice(0, 3);
+}
+
 export function captionElements(subject, caption) {
   const own = new Set(subject.words);
   const words = caption.toLowerCase().split(/[^a-z\-']+/).filter((w) => w && !own.has(w));

@@ -236,6 +236,44 @@ function setArmed(on) {
 }
 
 // Fill a menu's decoration strips with random sprites, different every time it opens.
+/** Run-over scoreboard: the 5 towers that dealt the most damage (sold ones included), then every combo and theme found. */
+function fillScoreboard() {
+  const best = state.towers.concat(state.retired || []).filter((t) => t.damage > 0)
+    .sort((a, b) => b.damage - a.damage).slice(0, 5);
+  const list = $("over-best");
+  list.innerHTML = "";
+  best.forEach((t, i) => {
+    const row = document.createElement("li");
+    const c = document.createElement("canvas");
+    c.width = c.height = 16; c.className = "sprite";
+    c.getContext("2d").drawImage(t.pack.sprite(t.drawing), 0, 0);
+    const name = document.createElement("span");
+    name.className = "best-name";
+    name.textContent = `${i + 1}. ${t.subject.name}` + (state.towers.includes(t) ? "" : " (gone)");
+    const dmg = document.createElement("span");
+    dmg.className = "best-dmg";
+    dmg.textContent = `${Math.round(t.damage).toLocaleString()} dmg, ${t.kills} kills`;
+    row.append(c, name, dmg);
+    list.append(row);
+  });
+  $("over-best-head").classList.toggle("hidden", !best.length);
+  const found = $("over-found");
+  found.innerHTML = "";
+  const chip = (label, color, border) => {
+    const s = document.createElement("span");
+    s.className = "found-chip" + (border ? " theme" : "");
+    s.style.setProperty("--c", color);
+    const n = parseInt(color.slice(1), 16);                  // light colours (yellow, gold) get dark text
+    if (!border && ((n >> 16) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11) > 160) s.classList.add("light");
+    s.textContent = label;
+    found.append(s);
+  };
+  const d = state.discovered || { combos: [], themes: [] };
+  for (const id of d.combos) chip(COMBOS[id].name, COMBOS[id].color, false);
+  for (const id of d.themes) chip(THEMES[id].name, THEMES[id].color, true);
+  $("over-found-head").textContent = `Combos ${d.combos.length}/${Object.keys(COMBOS).length}  ·  Themes ${d.themes.length}/${Object.keys(THEMES).length}`;
+}
+
 function decorate(overlay) {
   overlay.querySelectorAll("[data-deco]").forEach((strip) => {
     strip.innerHTML = "";
@@ -732,6 +770,7 @@ export function refreshUI() {
 
   if (state.phase === "over" && $("over").classList.contains("hidden")) {
     $("over-stats").textContent = `You reached wave ${state.wave} with ${state.kills} kills. Score ${state.score}.`;
+    fillScoreboard();
     decorate($("over"));
     $("over").classList.remove("hidden");
   }

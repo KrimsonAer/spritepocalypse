@@ -242,6 +242,17 @@ canvas, .sprite { image-rendering: pixelated; image-rendering: crisp-edges; }
 /* the game name: always one line, sized to fit the sheet on any screen */
 .title.main { font-size: min(2.3em, calc((100vw - 80px) / 10.5)); white-space: nowrap; margin-bottom: 0.45em; }
 .tagline { margin: 0.5em 0 0.75em; font-size: 1em; color: #334155; text-wrap: balance; }
+/* run-over scoreboard */
+.over-head { margin: 0.6em 0 0.3em; font-size: 0.95em; color: var(--ink); }
+.over-best { list-style: none; margin: 0 auto; padding: 0; max-width: 22em; text-align: left; }
+.over-best li { display: flex; align-items: center; gap: 0.5em; padding: 0.2em 0.3em; background: #ffffffcc; border-bottom: 1px solid #d6e6f7; }
+.over-best canvas { width: 2em; height: 2em; flex: none; }
+.over-best .best-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
+.over-best .best-dmg { flex: none; font-size: 0.85em; color: #475569; }
+.over-found { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.3em; margin: 0 auto 0.6em; max-width: 24em; }
+.found-chip { font-size: 0.8em; padding: 0.15em 0.45em; background: var(--c); color: #fff; text-shadow: 1px 1px 0 #0f172a; }
+.found-chip.light { color: #0f172a; text-shadow: none; }
+.found-chip.theme { background: #fff; color: #0f172a; text-shadow: none; outline: 2px solid var(--c); outline-offset: -2px; }
 .loading { font-size: 0.85em; color: #64748b; margin-bottom: 0.5em; }
 .menu-buttons { display: flex; flex-direction: column; gap: 0.5em; align-items: stretch; margin: 0.4em auto; max-width: 17.5em; }
 .deco { display: flex; justify-content: center; gap: 0.4em; min-height: 2.5em; flex-wrap: wrap; }

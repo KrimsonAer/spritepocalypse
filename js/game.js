@@ -7,8 +7,8 @@
 // Numbers come from config.js. Tags are explained in GDD.md.
 // =====================================================================================
 
-import { CONFIG, ELEMENT_COLORS, COMBOS, COMBO_STRONGER, THEMES, WORKSHOP_TRICKS } from "./config.js";
-import { db, loadPack, randomSubject, enemyTagsFor } from "./data.js";
+import { CONFIG, ELEMENT_COLORS, COMBOS, COMBO_STRONGER, COMBO_SIZE, THEMES, WORKSHOP_TRICKS } from "./config.js";
+import { db, loadPack, randomSubject, enemyTagsFor, categoriesFor } from "./data.js";
 import { pickDrawing } from "./search.js";
 import { sfx } from "./audio.js";
 
@@ -60,6 +60,8 @@ export function newRun() {
     hearts: CONFIG.run.hearts, gold: CONFIG.run.startGold, wave: 1, score: 0, kills: 0,
     freeTowers: CONFIG.run.freeTowers, paidTowers: 0,
     towers: [], enemies: [], shots: [], fx: [], spawnQueue: [], banner: null, mines: [],
+    retired: [],                          // sold or shattered towers, kept for the run-over scoreboard
+    discovered: { combos: [], themes: [] },   // every combo and theme formed this run, in order
   });
   state.shownTier = -1;      // which layout rating word was last announced (-1 = none yet)
   state.blocks.fill(0);
@@ -340,12 +342,13 @@ export function placeTower(x, y, candidate) {
   const tower = {
     id: state.nextId++, x, y,
     subject: candidate.subject, pack: candidate.pack, drawing: candidate.drawing,
+    categories: categoriesFor(candidate.subject, candidate.caption),   // combo categories of this exact drawing
     caption: candidate.caption, tags: candidate.tags,
     stats: towerStats(candidate.tags),
     cd: 0.3, paid: price, usedFree,
     locked: state.phase === "wave",   // towers placed mid-wave are locked at once
     target: null, beamRamp: 1, beamAcc: 0, beamTarget: null,
-    stunUntil: 0, recoil: 0, wavesAlive: 0, kills: 0,
+    stunUntil: 0, recoil: 0, wavesAlive: 0, kills: 0, damage: 0,   // damage = total dealt, for the scoreboard
     aura: { dmg: 1, rate: 1, range: 0, imbue: [] },
     combos: [], combo: noCombo(),   // categories it is in a combo for, and the summed combo bonus
   };
@@ -361,8 +364,19 @@ export function refundFor(tower) {
   return tower.locked ? Math.floor(tower.paid * CONFIG.run.sellRefund) : tower.paid;
 }
 
+/** Keep a record of a tower leaving the board (sold or shattered) so the run-over scoreboard can show it. */
+function retire(tower) {
+  if (tower.damage > 0 && state.retired) state.retired.push(tower);
+}
+
+/** Note a combo or theme formed this run (kind = "combos" or "themes"). */
+function discover(kind, id) {
+  if (state.discovered && !state.discovered[kind].includes(id)) state.discovered[kind].push(id);
+}
+
 /** Remove a tower. Unlocked towers come back in full (free slot or gold), locked ones at the sell rate. */
 export function removeTower(tower) {
+  retire(tower);
   const i = cellIndex(tower.x, tower.y);
   state.gold += refundFor(tower);
   if (!tower.locked) {
@@ -512,6 +526,7 @@ function refreshThemes() {
       const kinds = new Set(group.map((t) => t.subject.kind));
       if (group.length < 3 || kinds.size < 3) continue;
       for (const t of group) t.themes.push(id);
+      discover("themes", id);
       const key = id + ":" + group.map((t) => t.id).sort((p, q) => p - q).join(",");
       keys.add(key);
       state.themeGroups.push({ id, towers: group, key });
@@ -625,7 +640,7 @@ function refreshCombos() {
   // link is broken (the partner is sold or moved), and can then join a different combo.
   const towers = state.towers.slice().sort((p, q) => p.id - q.id);          // oldest first
   const near = (a, b) => a !== b && Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1 && a.subject.name !== b.subject.name;
-  const fits = (t, cat) => t.subject.categories.includes(cat) && COMBOS[cat];
+  const fits = (t, cat) => t.categories.includes(cat) && COMBOS[cat];
   // 1. drop locks that lost every partner (repeat, since one drop can strand another tower)
   for (let changed = true; changed;) {
     changed = false;
@@ -641,7 +656,7 @@ function refreshCombos() {
   for (const t of towers.slice().reverse()) {
     if (t.lockCat) continue;
     let best = null;
-    for (const cat of t.subject.categories) {
+    for (const cat of t.categories) {
       if (!COMBOS[cat]) continue;
       const locked = towers.filter((o) => near(t, o) && o.lockCat === cat);
       const free = towers.filter((o) => near(t, o) && !o.lockCat && fits(o, cat));
@@ -668,23 +683,39 @@ function refreshCombos() {
     if (!t.lockCat) continue;
     for (const o of state.towers) if (near(t, o) && o.lockCat === t.lockCat) t.links.push({ to: o, cat: t.lockCat });
   }
+  // combo size: how many towers are linked (directly or through each other) in this tower's combo
+  for (const t of state.towers) t.comboSize = 0;
+  for (const t of state.towers) {
+    if (!t.lockCat || t.comboSize) continue;
+    const group = [t];
+    for (let q = 0; q < group.length; q++) for (const l of group[q].links) if (!group.includes(l.to)) group.push(l.to);
+    for (const o of group) o.comboSize = group.length;
+    discover("combos", t.lockCat);
+  }
   for (const t of state.towers) {
     const c = noCombo();
+    // bigger combos: number bonuses grow, on/off-only combos give extra damage instead (COMBO_SIZE in config.js)
+    const extra = Math.max(0, Math.min(t.comboSize, COMBO_SIZE.maxTowers) - 2);
+    const k = 1 + extra * COMBO_SIZE.bonusPerExtra;
+    const chance = (p) => Math.min(COMBO_SIZE.chanceCap, p * k);
+    c.size = t.comboSize; c.sizeBoost = extra;
     for (const cat of t.combos) {
       const bonus = COMBOS[cat].bonus;
-      if (bonus.dmg) c.dmg += bonus.dmg;
-      if (bonus.rate) c.rate += bonus.rate;
-      if (bonus.range) c.range += bonus.range;
-      if (bonus.crit) c.crit += bonus.crit;
-      if (bonus.status) c.status *= bonus.status;
-      if (bonus.gold) c.gold *= bonus.gold;
+      const grows = ["dmg", "rate", "range", "crit", "status", "gold", "stunChance", "confuseChance", "pull", "markChance"].some((f) => bonus[f]);
+      if (!grows) c.dmg += extra * COMBO_SIZE.damagePerExtra;
+      if (bonus.dmg) c.dmg += bonus.dmg * k;
+      if (bonus.rate) c.rate += bonus.rate * k;
+      if (bonus.range) c.range += bonus.range * k;
+      if (bonus.crit) c.crit += bonus.crit * k;
+      if (bonus.status) c.status *= 1 + (bonus.status - 1) * k;
+      if (bonus.gold) c.gold *= 1 + (bonus.gold - 1) * k;
       if (bonus.imbue && !c.imbue.includes(bonus.imbue)) c.imbue.push(bonus.imbue);
       for (const flag of ["antiAir", "slow", "knockback", "pierceArmor", "blastProof"]) if (bonus[flag]) c[flag] = true;
       // chance-based bonuses (Rocks, Toys, Signs): doubled if the tower already does that thing
-      if (bonus.stunChance) { c.stunChance = bonus.stunChance * (t.stats.stun ? 2 : 1); if (t.stats.stun) c.strong.push(cat); }
-      if (bonus.confuseChance) { c.confuseChance = bonus.confuseChance * (t.stats.confuse ? 2 : 1); if (t.stats.confuse) c.strong.push(cat); }
-      if (bonus.pull) { c.pull = bonus.pull * (t.stats.magnet ? 2 : 1); if (t.stats.magnet) c.strong.push(cat); }
-      if (bonus.markChance) { c.markChance = bonus.markChance * (t.stats.tasty ? 2 : 1); if (t.stats.tasty) c.strong.push(cat); }
+      if (bonus.stunChance) { c.stunChance = chance(bonus.stunChance * (t.stats.stun ? 2 : 1)); if (t.stats.stun) c.strong.push(cat); }
+      if (bonus.confuseChance) { c.confuseChance = chance(bonus.confuseChance * (t.stats.confuse ? 2 : 1)); if (t.stats.confuse) c.strong.push(cat); }
+      if (bonus.pull) { c.pull = chance(bonus.pull * (t.stats.magnet ? 2 : 1)); if (t.stats.magnet) c.strong.push(cat); }
+      if (bonus.markChance) { c.markChance = chance(bonus.markChance * (t.stats.tasty ? 2 : 1)); if (t.stats.tasty) c.strong.push(cat); }
       // Already has the effect this combo gives? Then it gets the stronger version instead.
       const X = COMBO_STRONGER, own = t.stats;
       const already = (bonus.imbue && own.elems.includes(bonus.imbue)) || (bonus.antiAir && own.antiAir) ||
@@ -900,6 +931,7 @@ function endWave() {
   }
   themesEndWave();
   for (const tower of broken) {                                // Glass Cannon: breaks after a few waves, no refund
+    retire(tower);
     state.towers.splice(state.towers.indexOf(tower), 1);
     state.towerAt.delete(cellIndex(tower.x, tower.y));
     floatText(tower.x, tower.y - 0.2, "SHATTERED", "#94a3b8", 1);
@@ -1483,11 +1515,14 @@ function hurt(e, amount, tower, opts) {
   e.lastHit = state.time;
   e.lastHitAmount = amount;
   let left = amount;
+  let dealt = 0;                                            // real damage done, for the tower's scoreboard total
   if (e.shield > 0 && !opts.ignoreShield) {
     const soak = Math.min(e.shield, left);
-    e.shield -= soak; left -= soak;
+    e.shield -= soak; left -= soak; dealt += soak;
   }
+  dealt += Math.min(left, Math.max(0, e.hp));
   e.hp -= left;
+  if (tower && tower.damage !== undefined) tower.damage += dealt;
   if (!opts.silent) {
     e.sleepUntil = 0;                                         // any real hit wakes a sleeper
     e.flashUntil = state.time + 0.08;
