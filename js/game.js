@@ -831,9 +831,11 @@ function updateEnemy(e, dt) {
       e.healTimer = E.healerEvery;
       let healed = false;
       for (const o of state.enemies) {
-        if (o === e || o.dead || o.hp >= o.maxHp) continue;
+        if (o === e || o.dead || o.healer || o.hp >= o.maxHp) continue;     // Healers never heal each other
+        if (now < (o.healedUntil || 0)) continue;                            // no stacking: one heal per window
         if (Math.hypot(o.x - e.x, o.y - e.y) > E.healerRange) continue;
         o.hp = Math.min(o.maxHp, o.hp + o.maxHp * E.healerShare);
+        o.healedUntil = now + E.healerEvery;
         healed = true;
       }
       if (healed) state.fx.push({ kind: "ring", x: e.x, y: e.y, r: E.healerRange, color: "#22c55e", life: 0.4, max: 0.4 });

@@ -96,9 +96,11 @@ export const CONFIG = {
     shieldDelay: 3,          // Shielded: seconds without damage before the shield refills
     shieldRegen: 0.2,        // Shielded: share of the shield refilled per second
     regenShare: 0.025,       // Regen: share of max health healed per second
-    healerEvery: 2,          // Healer: seconds between heal pulses
+    healerEvery: 3,          // Healer: seconds between heal pulses (was 2)
     healerRange: 1.6,        // Healer: pulse radius
-    healerShare: 0.08,       // Healer: share of max health restored to each enemy in the pulse
+    healerShare: 0.04,       // Healer: share of max health restored to each enemy in the pulse (was 0.08)
+    // Heals do not stack: an enemy healed by any Healer cannot be healed again for healerEvery seconds.
+    // Healers never heal other Healers.
     splitCount: 2,           // Splitter: children spawned on death
     splitHp: 0.35,           // Splitter: child health as a share of the parent max health
     splitSize: 0.6,          // Splitter: child size multiplier

@@ -165,10 +165,10 @@ export function draw() {
   }
 
   // range ring for the selected tower, or for the armed sprite over a hovered block
-  if (view.selected) rangeRing(g, view.selected.x, view.selected.y, towerRange(view.selected), view.selected.stats.color);
+  if (view.selected) rangeRing(g, view.selected.x, view.selected.y, towerRange(view.selected), view.selected.stats.color, view.selected.stats.shape);
   if (view.armed && view.hover && state.blocks[cellIndex(view.hover.x, view.hover.y)] && !state.towerAt.has(cellIndex(view.hover.x, view.hover.y))) {
     const stats = towerStats(view.armed.tags);
-    rangeRing(g, view.hover.x, view.hover.y, stats.range, stats.color);
+    rangeRing(g, view.hover.x, view.hover.y, stats.range, stats.color, stats.shape);
     g.globalAlpha = 0.6;
     drawSprite(g, view.armed.pack.sprite(view.armed.drawing), view.hover.x, view.hover.y, 0.8);
     g.globalAlpha = 1;
@@ -343,12 +343,21 @@ function drawComboBlocks(g) {
   }
 }
 
-function rangeRing(g, x, y, range, color) {
+// Range circle for a selected or about-to-be-placed tower.
+// Spin has none (its blades show their own reach). Artillery has the dead zone cut out of the middle.
+function rangeRing(g, x, y, range, color, shape) {
+  if (shape === "Spin") return;
+  const cx = centre(x), cy = centre(y);
+  const inner = shape === "Artillery" ? CONFIG.tower.shapes.Artillery.minRange * view.cell : 0;
   g.strokeStyle = color; g.fillStyle = color;
   g.globalAlpha = 0.1;
-  g.beginPath(); g.arc(centre(x), centre(y), range * view.cell, 0, Math.PI * 2); g.fill();
+  g.beginPath();
+  g.arc(cx, cy, range * view.cell, 0, Math.PI * 2);
+  if (inner) { g.moveTo(cx + inner, cy); g.arc(cx, cy, inner, 0, Math.PI * 2, true); }   // hole in the middle
+  g.fill("evenodd");
   g.globalAlpha = 0.7; g.lineWidth = 2; g.setLineDash([6, 5]);
-  g.stroke();
+  g.beginPath(); g.arc(cx, cy, range * view.cell, 0, Math.PI * 2); g.stroke();
+  if (inner) { g.beginPath(); g.arc(cx, cy, inner, 0, Math.PI * 2); g.stroke(); }
   g.setLineDash([]); g.globalAlpha = 1;
 }
 
