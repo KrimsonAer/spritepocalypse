@@ -324,7 +324,7 @@ function drawComboBlocks(g) {
   for (const t of state.towers) {
     if (!t.combos || !t.combos.length) continue;
     g.globalAlpha = 0.55;
-    drawComboWedges(g, t.x * s + m, t.y * s + m, s - 2 * m, t.combos.map((cat) => COMBOS[cat].color));
+    drawComboWedges(g, t.x * s + m, t.y * s + m, s - 2 * m, t.combos.map((cat) => COMBOS[cat]));
     for (const link of t.links) {
       const o = link.to;
       if (o.id < t.id) continue;                               // draw each bridge once
@@ -345,17 +345,27 @@ function drawComboBlocks(g) {
 // One block split into equal wedges from its centre, one per combo (up to 8). The first wedge
 // starts at the top-right corner, so 2 combos split the block diagonally: the first combo fills the
 // bottom-right half and the second the top-left. 3 combos = 3 wedges, 4 = the 4 triangles, ... 8.
-function drawComboWedges(g, x, y, w, colors) {
-  if (colors.length === 1) { g.fillStyle = colors[0]; g.fillRect(x, y, w, w); return; }
+// combos = COMBOS entries; mini combos get white diagonal stripes over the parent's colour.
+function drawComboWedges(g, x, y, w, combos) {
   const cx = x + w / 2, cy = y + w / 2, R = w;                // R reaches past the corners; the clip trims it
   g.save();
   g.beginPath(); g.rect(x, y, w, w); g.clip();
-  const step = (Math.PI * 2) / colors.length, start = -Math.PI / 4;
-  colors.forEach((color, i) => {
-    g.fillStyle = color;
-    g.beginPath(); g.moveTo(cx, cy);
-    g.arc(cx, cy, R, start + i * step, start + (i + 1) * step);
-    g.closePath(); g.fill();
+  const step = (Math.PI * 2) / combos.length, start = -Math.PI / 4;
+  combos.forEach((combo, i) => {
+    g.fillStyle = combo.color;
+    g.beginPath();
+    if (combos.length === 1) g.rect(x, y, w, w);
+    else { g.moveTo(cx, cy); g.arc(cx, cy, R, start + i * step, start + (i + 1) * step); g.closePath(); }
+    g.fill();
+    if (combo.mini) {                                         // stripes, clipped to this wedge
+      g.save();
+      g.clip();
+      g.strokeStyle = "#ffffff"; g.lineWidth = Math.max(1, w * 0.07);
+      g.beginPath();
+      for (let k = 0; k < w * 2; k += w * 0.22) { g.moveTo(x + k, y); g.lineTo(x + k - w, y + w); }
+      g.stroke();
+      g.restore();
+    }
   });
   g.restore();
 }

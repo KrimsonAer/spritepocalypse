@@ -322,6 +322,49 @@ export const COMBOS = {
   symbols:   { name: "Signs",     color: "#eab308", bonus: { markChance: 0.2 },     desc: "Marked: their hits sometimes mark enemies to take extra damage.", strong: "Marked: their hits mark enemies much more often." },
 };
 
+// MINI COMBOS (2026-11-12). Families of variants of one thing (fire slime, ice slime, slime...) form a
+// mini combo on top of the normal ones: same rules (touching, one of each sprite, +N size), but a
+// smaller version of the parent combo's bonus. A sprite is in a family when its name IS the family
+// word or ends with it ("fire slime" -> slime). Drawn as the parent's colour with white stripes.
+export const MINI_COMBO = {
+  share: 0.5,           // fraction of the parent's number bonuses (0.5 = half)
+  flagDamage: 0.1,      // parents with only on/off bonuses (Water, anti-air...) give this much extra damage instead
+};
+// [family word, display name, parent combo]
+const MINI_FAMILIES = [
+  ["slime", "Slimes", "monsters"], ["golem", "Golems", "monsters"], ["dragon", "Dragons", "monsters"], ["elemental", "Elementals", "monsters"],
+  ["knight", "Knights", "fighters"], ["warrior", "Warriors", "fighters"],
+  ["sword", "Swords", "weapons"], ["axe", "Axes", "weapons"], ["hammer", "Hammers", "weapons"],
+  ["bow", "Bows", "ranged"], ["pistol", "Pistols", "ranged"], ["rifle", "Rifles", "ranged"], ["crossbow", "Crossbows", "ranged"], ["bomb", "Bombs", "ranged"],
+  ["wand", "Wands", "magic"], ["staff", "Staffs", "magic"], ["orb", "Orbs", "magic"], ["tome", "Tomes", "magic"], ["amulet", "Amulets", "magic"], ["crystal", "Crystals", "magic"],
+  ["armor", "Armor", "armour"], ["helmet", "Helmets", "armour"], ["gauntlet", "Gauntlets", "armour"], ["shield", "Shields", "armour"],
+  ["boots", "Boots", "clothing"], ["hat", "Hats", "clothing"], ["robe", "Robes", "clothing"], ["mask", "Masks", "clothing"],
+  ["pizza", "Pizzas", "food"], ["soup", "Soups", "food"], ["egg", "Eggs", "food"], ["pie", "Pies", "desserts"],
+  ["mushroom", "Mushrooms", "plants"], ["cactus", "Cacti", "plants"], ["truck", "Trucks", "vehicles"], ["car", "Cars", "vehicles"],
+  ["cat", "Cats", "land"], ["fish", "Fish", "sea"], ["crown", "Crowns", "treasure"], ["drum", "Drums", "music"], ["ore", "Ores", "rocks"],
+];
+const MINI_EXCLUDE = new Set(["violin bow", "crate of fish", "jar of slime", "jar of eyeballs"]);
+for (const [word, name, parent] of MINI_FAMILIES) {
+  const p = COMBOS[parent], bonus = {};
+  for (const [k, v] of Object.entries(p.bonus)) {
+    if (typeof v !== "number") continue;
+    bonus[k] = k === "status" || k === "gold" ? 1 + (v - 1) * MINI_COMBO.share : v * MINI_COMBO.share;
+  }
+  const flagOnly = !Object.keys(bonus).length;
+  if (flagOnly) bonus.dmg = MINI_COMBO.flagDamage;
+  COMBOS["mini:" + word] = {
+    name, color: p.color, bonus, mini: true, parent, word,
+    desc: flagOnly ? `Mini ${p.name} combo: these towers hit ${Math.round(MINI_COMBO.flagDamage * 100)}% harder.`
+                   : `Mini ${p.name} combo: ${Math.round(MINI_COMBO.share * 100)}% of the ${p.name} bonus. ${p.desc}`,
+  };
+}
+/** The mini combo id ("mini:slime") a sprite name belongs to, or null. */
+export function miniFamilyOf(name) {
+  if (MINI_EXCLUDE.has(name)) return null;
+  for (const [word] of MINI_FAMILIES) if (name === word || name.endsWith(" " + word)) return "mini:" + word;
+  return null;
+}
+
 // Bigger combos. A combo of 3, 4 or 5 linked towers gives each tower in it a bigger bonus.
 // Number bonuses (damage, speed, range, crit, gold, Weather's longer effects, chance bonuses) grow by
 // bonusPerExtra of the normal bonus for every tower past 2: 0.5 = 3 towers x1.5, 4 towers x2 ... 15 towers x7.5.

@@ -727,7 +727,7 @@ function refreshCombos() {
   }
   for (const { a, b, cat } of fresh) {
     if (!b) continue;
-    state.fx.push({ kind: "text", x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 0.35, text: COMBOS[cat].name.toUpperCase() + " COMBO", color: COMBOS[cat].color, scale: 0.85, life: 1.4, max: 1.4 });
+    state.fx.push({ kind: "text", x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 0.35, text: COMBOS[cat].name.toUpperCase() + (COMBOS[cat].mini ? " MINI COMBO" : " COMBO"), color: COMBOS[cat].color, scale: 0.85, life: 1.4, max: 1.4 });
   }
   if (fresh.length) sfx.combo();
 }
@@ -887,6 +887,11 @@ function spawnEnemy(entry) {
 }
 
 /** Make a smaller enemy of the same kind next to a parent (Summoner minions, eggs, Transport cargo). */
+/** Poisoned right now? Poison also stops healing and regeneration (anti-heal). */
+function isPoisoned(e, now) {
+  return !!(e.poison && e.poison.until > now);
+}
+
 function spawnChild(parent, opts) {
   const tags = parent.tags.filter((t) => !["Boss", "Summoner", "Egg Layer", "Transport", "Splitter", "Tanky", "Swarm", "Cocoon", "Undying", "Pinata", "Rally"].includes(t));
   const child = enemyFromTags(parent.pack, parent.drawing, tags, 1, 1);
@@ -1007,7 +1012,8 @@ function updateEnemy(e, dt) {
     e.dotAcc = 0; e.dotTimer = 0;
   }
   // self repair
-  if (e.regen && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * E.regenShare * dt);
+  // Poison is anti-heal: a poisoned enemy cannot regenerate or be healed by a Healer
+  if (e.regen && e.hp < e.maxHp && !isPoisoned(e, now)) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * E.regenShare * dt);
   if (e.maxShield && e.shield < e.maxShield && now - e.lastHit > E.shieldDelay) {
     e.shield = Math.min(e.maxShield, e.shield + e.maxShield * E.shieldRegen * dt);
   }
@@ -1017,7 +1023,7 @@ function updateEnemy(e, dt) {
       e.healTimer = E.healerEvery;
       let healed = false;
       for (const o of state.enemies) {
-        if (o === e || o.dead || o.healer || o.hp >= o.maxHp) continue;     // Healers never heal each other
+        if (o === e || o.dead || o.healer || o.hp >= o.maxHp || isPoisoned(o, now)) continue;     // Healers never heal each other; poison blocks healing
         if (now < (o.healedUntil || 0)) continue;                            // no stacking: one heal per window
         if (Math.hypot(o.x - e.x, o.y - e.y) > E.healerRange) continue;
         o.hp = Math.min(o.maxHp, o.hp + o.maxHp * E.healerShare);

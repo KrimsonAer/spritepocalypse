@@ -4,7 +4,7 @@
 // one small file (about 75 KB) per subject, fetched the first time it is typed or spawned.
 // =====================================================================================
 
-import { CONFIG, CAPTION_ELEMENTS } from "./config.js";
+import { CONFIG, CAPTION_ELEMENTS, miniFamilyOf } from "./config.js";
 
 const DATA_URL = "data/";
 
@@ -141,7 +141,10 @@ export function randomSubject() {
 export function categoriesFor(subject, caption) {
   const cats = subject.categories.slice();
   if (!cats.includes("magic") && captionElements(subject, caption).includes("Magic")) cats.push("magic");
-  return cats.slice(0, 3);
+  const out = cats.slice(0, 3);
+  const family = miniFamilyOf(subject.name);       // mini combo family (fire slime -> Slimes), on top of the 3
+  if (family) out.push(family);
+  return out;
 }
 
 export function captionElements(subject, caption) {

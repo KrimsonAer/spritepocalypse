@@ -279,9 +279,11 @@ function fillScoreboard() {
     found.append(s);
   };
   const d = state.discovered || { combos: [], themes: [] };
-  for (const id of d.combos) chip(COMBOS[id].name, COMBOS[id].color, false);
+  for (const id of d.combos) chip(COMBOS[id].name + (COMBOS[id].mini ? " (mini)" : ""), COMBOS[id].color, false);
   for (const id of d.themes) chip(THEMES[id].name, THEMES[id].color, true);
-  $("over-found-head").textContent = `Combos ${d.combos.length}/${Object.keys(COMBOS).length}  ·  Themes ${d.themes.length}/${Object.keys(THEMES).length}`;
+  const minis = Object.keys(COMBOS).filter((id) => COMBOS[id].mini), bigs = Object.keys(COMBOS).filter((id) => !COMBOS[id].mini);
+  const countFound = (list) => d.combos.filter((id) => list.includes(id)).length;
+  $("over-found-head").textContent = `Combos ${countFound(bigs)}/${bigs.length}  ·  Mini ${countFound(minis)}/${minis.length}  ·  Themes ${d.themes.length}/${Object.keys(THEMES).length}`;
 }
 
 function decorate(overlay) {
@@ -424,7 +426,7 @@ function showCard() {
     const combos = (t.combos || []).map((cat) => {
       const size = (t.comboSizes || {})[cat] || 2;
       const tip = ((t.combo.strong || []).includes(cat) && COMBOS[cat].strong ? COMBOS[cat].strong : COMBOS[cat].desc) + " " + comboSizeNote(cat, size);
-      return `<span class="tag combo explains" style="--c:${COMBOS[cat].color}" data-tip="${tip}">${COMBOS[cat].name.toUpperCase()} COMBO +${size}</span>`;
+      return `<span class="tag combo explains${COMBOS[cat].mini ? " mini" : ""}" style="--c:${COMBOS[cat].color}" data-tip="${tip}">${COMBOS[cat].name.toUpperCase()} ${COMBOS[cat].mini ? "MINI" : "COMBO"} +${size}</span>`;
     }).join("");
     // themes show the same way, as an outlined chip (themes outline, combos fill)
     const themes = (t.themes || []).map((id) => `<span class="tag theme explains" style="--c:${THEMES[id].color}" data-tip="${THEMES[id].desc}">${THEMES[id].name.toUpperCase()} THEME</span>`).join("");
