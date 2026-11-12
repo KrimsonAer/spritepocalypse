@@ -67,6 +67,7 @@ export function newRun() {
   state.blocks.fill(0);
   state.towerAt.clear();
   refreshPaths();
+  refreshAuras();            // clears last run's theme outlines and combo fills (no towers left)
 }
 
 /** Price of the next tower: 0 while free placements remain. */
@@ -519,7 +520,7 @@ function refreshThemes() {
         const a = group[q];
         for (const b of members) {
           if (seen.has(b) || Math.abs(a.x - b.x) > 1 || Math.abs(a.y - b.y) > 1) continue;
-          if (a.subject.kind === b.subject.kind || a.subject.name === b.subject.name) continue;
+          if (a.subject.kind === b.subject.kind || group.some((t) => t.subject.name === b.subject.name)) continue;   // one of each sprite
           seen.add(b); group.push(b);
         }
       }
@@ -634,73 +635,64 @@ function noCombo() {
  * category, and are different sprites. Each tower gets each category's bonus once.
  * New links pop a label between the two towers and play a sound.
  */
+let comboMembers = new Set();   // "cat:towerId" pairs from the last refresh, so only NEW combos pop up
+
 function refreshCombos() {
-  // Lock-in: a tower belongs to ONE combo at a time (tower.lockCat). Once it joins a combo it stays in
-  // it while at least one neighbour is still locked into the same combo. It is freed only when that
-  // link is broken (the partner is sold or moved), and can then join a different combo.
-  const towers = state.towers.slice().sort((p, q) => p.id - q.id);          // oldest first
+  // A tower is in a combo for EVERY category it shares with a touching tower (8 around, a different
+  // sprite). So a tower can be in several combos at once, one per matching category (2026-11-12, this
+  // replaced the one-combo-at-a-time lock-in). Each combo's size counts its own linked group.
   const near = (a, b) => a !== b && Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1 && a.subject.name !== b.subject.name;
   const fits = (t, cat) => t.categories.includes(cat) && COMBOS[cat];
-  // 1. drop locks that lost every partner (repeat, since one drop can strand another tower)
-  for (let changed = true; changed;) {
-    changed = false;
-    for (const t of towers) {
-      if (!t.lockCat) continue;
-      if (!towers.some((o) => near(t, o) && o.lockCat === t.lockCat)) { t.lockCat = null; changed = true; }
+  for (const t of state.towers) { t.combos = []; t.links = []; t.comboSizes = {}; }
+  // Build each category's groups oldest tower first. A group never holds two of the same sprite
+  // (Mark, 2026-11-12): 10 lemons around an apple make a 2-tower Food combo, not an 11-tower one. A
+  // duplicate left out can still start its own group with other towers that are not in one yet.
+  const oldest = state.towers.slice().sort((p, q) => p.id - q.id);
+  for (const cat of Object.keys(COMBOS)) {
+    const placed = new Set();
+    for (const start of oldest) {
+      if (placed.has(start) || !fits(start, cat)) continue;
+      const group = [start], names = new Set([start.subject.name]);
+      placed.add(start);
+      for (let q = 0; q < group.length; q++) {
+        for (const o of oldest) {
+          if (placed.has(o) || names.has(o.subject.name) || !fits(o, cat) || !near(group[q], o)) continue;
+          group.push(o); names.add(o.subject.name); placed.add(o);
+        }
+      }
+      if (group.length < 2) continue;
+      for (const t of group) {
+        t.combos.push(cat);
+        t.comboSizes[cat] = group.length;
+        for (const o of group) if (near(t, o)) t.links.push({ to: o, cat });
+      }
+      discover("combos", cat);
     }
   }
-  // 2. free towers join a combo: an existing combo first, then the one with the most matching
-  //    neighbours, then the one with the oldest tower
+  // keep each tower's combos in its own category order (wedge order on the block)
+  for (const t of state.towers) t.combos.sort((p, q) => t.categories.indexOf(p) - t.categories.indexOf(q));
+  // which combos are new since last time (for the pop-up), newest tower first
   const fresh = [];
-  // newest first, so the tower just placed makes the choice (and can join an existing combo)
-  for (const t of towers.slice().reverse()) {
-    if (t.lockCat) continue;
-    let best = null;
-    for (const cat of t.categories) {
-      if (!COMBOS[cat]) continue;
-      const locked = towers.filter((o) => near(t, o) && o.lockCat === cat);
-      const free = towers.filter((o) => near(t, o) && !o.lockCat && fits(o, cat));
-      if (!locked.length && !free.length) continue;
-      const oldest = Math.min(...locked.concat(free).map((o) => o.id));
-      const option = { cat, existing: locked.length > 0, count: locked.length + free.length, oldest, free };
-      if (!best || (option.existing && !best.existing) ||
-          (option.existing === best.existing && (option.count > best.count || (option.count === best.count && option.oldest < best.oldest)))) best = option;
-    }
-    if (!best) continue;
-    t.lockCat = best.cat;
-    if (!best.existing) {                       // a brand new combo: the oldest free partner joins too
-      const partner = best.free.reduce((p, q) => (q.id < p.id ? q : p));
-      partner.lockCat = best.cat;
-      fresh.push({ a: t, b: partner, cat: best.cat });
-    } else {
-      const partner = towers.find((o) => near(t, o) && o.lockCat === best.cat);
-      fresh.push({ a: t, b: partner, cat: best.cat });
+  const members = new Set();
+  for (const t of state.towers) for (const cat of t.combos) members.add(cat + ":" + t.id);
+  const announced = new Set();
+  for (const t of state.towers.slice().sort((p, q) => q.id - p.id)) {
+    for (const cat of t.combos) {
+      if (comboMembers.has(cat + ":" + t.id) || announced.has(cat + ":" + t.id)) continue;
+      const partner = t.links.find((l) => l.cat === cat).to;
+      announced.add(cat + ":" + t.id); announced.add(cat + ":" + partner.id);
+      fresh.push({ a: t, b: partner, cat });
     }
   }
-  // 3. links and bonuses
-  for (const t of state.towers) { t.combos = t.lockCat ? [t.lockCat] : []; t.links = []; }
-  for (const t of state.towers) {
-    if (!t.lockCat) continue;
-    for (const o of state.towers) if (near(t, o) && o.lockCat === t.lockCat) t.links.push({ to: o, cat: t.lockCat });
-  }
-  // combo size: how many towers are linked (directly or through each other) in this tower's combo
-  for (const t of state.towers) t.comboSize = 0;
-  for (const t of state.towers) {
-    if (!t.lockCat || t.comboSize) continue;
-    const group = [t];
-    for (let q = 0; q < group.length; q++) for (const l of group[q].links) if (!group.includes(l.to)) group.push(l.to);
-    for (const o of group) o.comboSize = group.length;
-    discover("combos", t.lockCat);
-  }
+  comboMembers = members;
   for (const t of state.towers) {
     const c = noCombo();
-    // bigger combos: number bonuses grow, on/off-only combos give extra damage instead (COMBO_SIZE in config.js)
-    const extra = Math.max(0, Math.min(t.comboSize, COMBO_SIZE.maxTowers) - 2);
-    const k = 1 + extra * COMBO_SIZE.bonusPerExtra;
-    const chance = (p) => Math.min(COMBO_SIZE.chanceCap, p * k);
-    c.size = t.comboSize; c.sizeBoost = extra;
     for (const cat of t.combos) {
       const bonus = COMBOS[cat].bonus;
+      // bigger combos: number bonuses grow, on/off-only combos give extra damage instead (COMBO_SIZE in config.js)
+      const extra = Math.max(0, Math.min(t.comboSizes[cat], COMBO_SIZE.maxTowers) - 2);
+      const k = 1 + extra * COMBO_SIZE.bonusPerExtra;
+      const chance = (p) => Math.min(COMBO_SIZE.chanceCap, p * k);
       const grows = ["dmg", "rate", "range", "crit", "status", "gold", "stunChance", "confuseChance", "pull", "markChance"].some((f) => bonus[f]);
       if (!grows) c.dmg += extra * COMBO_SIZE.damagePerExtra;
       if (bonus.dmg) c.dmg += bonus.dmg * k;

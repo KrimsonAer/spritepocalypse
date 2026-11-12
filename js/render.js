@@ -323,13 +323,11 @@ function drawComboBlocks(g) {
   const s = view.cell, m = s * 0.07;
   for (const t of state.towers) {
     if (!t.combos || !t.combos.length) continue;
-    const color = COMBOS[t.combos[0]].color;
-    g.fillStyle = color;
     g.globalAlpha = 0.55;
-    g.fillRect(t.x * s + m, t.y * s + m, s - 2 * m, s - 2 * m);
+    drawComboWedges(g, t.x * s + m, t.y * s + m, s - 2 * m, t.combos.map((cat) => COMBOS[cat].color));
     for (const link of t.links) {
       const o = link.to;
-      if (o.id < t.id || link.cat !== t.combos[0]) continue;      // draw each bridge once
+      if (o.id < t.id) continue;                               // draw each bridge once
       g.fillStyle = COMBOS[link.cat].color;
       if (o.x !== t.x && o.y !== t.y) {                        // diagonal: diamond over the shared corner
         const cx = Math.max(t.x, o.x) * s, cy = Math.max(t.y, o.y) * s, r = m * 2.2;
@@ -342,6 +340,24 @@ function drawComboBlocks(g) {
     }
     g.globalAlpha = 1;
   }
+}
+
+// One block split into equal wedges from its centre, one per combo (up to 8). The first wedge
+// starts at the top-right corner, so 2 combos split the block diagonally: the first combo fills the
+// bottom-right half and the second the top-left. 3 combos = 3 wedges, 4 = the 4 triangles, ... 8.
+function drawComboWedges(g, x, y, w, colors) {
+  if (colors.length === 1) { g.fillStyle = colors[0]; g.fillRect(x, y, w, w); return; }
+  const cx = x + w / 2, cy = y + w / 2, R = w;                // R reaches past the corners; the clip trims it
+  g.save();
+  g.beginPath(); g.rect(x, y, w, w); g.clip();
+  const step = (Math.PI * 2) / colors.length, start = -Math.PI / 4;
+  colors.forEach((color, i) => {
+    g.fillStyle = color;
+    g.beginPath(); g.moveTo(cx, cy);
+    g.arc(cx, cy, R, start + i * step, start + (i + 1) * step);
+    g.closePath(); g.fill();
+  });
+  g.restore();
 }
 
 // Range circle for a selected or about-to-be-placed tower.
