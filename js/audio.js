@@ -81,6 +81,7 @@ export const sfx = {
   boss: () => [110, 98, 82].forEach((f, i) => blip("boss" + i, { freq: f, to: f * 0.8, dur: 0.35, delay: i * 0.28, type: "sawtooth", vol: 0.7 })),
   bossDown: () => [392, 523, 659, 784, 1047, 1319, 1568, 2093].forEach((f, i) => blip("bossdown" + i, { freq: f, dur: 0.12, delay: i * 0.06, vol: 0.55 })),
   combo: () => [659, 880, 1175].forEach((f, i) => blip("combo" + i, { freq: f, dur: 0.07, delay: i * 0.05, type: "triangle", vol: 0.45, gap: 0.15 })),
+  theme: () => [523, 659, 784, 1047, 784, 1047].forEach((f, i) => blip("theme" + i, { freq: f, dur: 0.08, delay: i * 0.06, type: "triangle", vol: 0.45, gap: 0.3 })),
   freeze: () => blip("freeze", { freq: 1568, to: 784, dur: 0.25, type: "triangle", vol: 0.4, gap: 0.3 }),
   coin: () => { blip("coin", { freq: 988, dur: 0.05, vol: 0.35, gap: 0.08 }); blip("coin2", { freq: 1319, dur: 0.12, delay: 0.05, vol: 0.35, gap: 0.08 }); },
   tick: () => blip("tick", { freq: 1175, to: 1568, dur: 0.04, type: "triangle", vol: 0.2, gap: 0.07 }),

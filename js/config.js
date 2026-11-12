@@ -303,7 +303,7 @@ export const COMBOS = {
   bugs:      { name: "Bugs",      color: "#65a30d", bonus: { imbue: "Poison" },    desc: "Swarm: their hits poison enemies.", strong: "Swarm: their poison is much stronger." },
   monsters:  { name: "Monsters",  color: "#7c3aed", bonus: { imbue: "Dark" },      desc: "Horde: their hits curse enemies so they take more damage.", strong: "Horde: their curses are much stronger." },
   fighters:  { name: "Fighters",  color: "#dc2626", bonus: { dmg: 0.25 },          desc: "Squad: these towers hit harder." },
-  magic:     { name: "Magic",     color: "#a855f7", bonus: { pierceArmor: true },  desc: "Arcane: armour does not soften their hits." },
+  magic:     { name: "Arcane",    color: "#14b8a6", bonus: { pierceArmor: true },  desc: "Spellbound: armour does not soften their hits." },
   townsfolk: { name: "Townsfolk", color: "#eab308", bonus: { rate: 0.15, gold: 1.25 }, desc: "Community: these towers attack a little faster and earn more gold." },
   plants:    { name: "Plants",    color: "#16a34a", bonus: { imbue: "Nature" },    desc: "Overgrown: their hits root enemies for a moment.", strong: "Overgrown: their roots hold much longer." },
   machines:  { name: "Machines",  color: "#475569", bonus: { rate: 0.25 },         desc: "Networked: these towers attack faster." },
@@ -314,6 +314,11 @@ export const COMBOS = {
   vehicles:  { name: "Vehicles",  color: "#ef4444", bonus: { knockback: true },    desc: "Ramming: their hits knock enemies back down the path.", strong: "Ramming: they knock enemies much further back." },
   weather:   { name: "Weather",   color: "#06b6d4", bonus: { status: 1.5 },        desc: "Storm front: their slows, burns, poisons and stuns last longer." },
   household: { name: "Household", color: "#a3a3a3", bonus: { dmg: 0.15 },         desc: "Handy: these towers hit a little harder." },
+  // added 2026-11-12
+  rocks:     { name: "Rocks",     color: "#78716c", bonus: { stunChance: 0.12 },    desc: "Rock solid: their hits sometimes stun.", strong: "Rock solid: their hits stun much more often." },
+  sports:    { name: "Sports",    color: "#0891b2", bonus: { rate: 0.15, range: 0.5 }, desc: "Training: these towers attack a little faster and reach a little further." },
+  toys:      { name: "Toys",      color: "#f472b6", bonus: { confuseChance: 0.15 }, desc: "Playtime: their hits sometimes send enemies wandering backwards.", strong: "Playtime: their hits confuse enemies much more often." },
+  symbols:   { name: "Signs",     color: "#eab308", bonus: { markChance: 0.2 },     desc: "Marked: their hits sometimes mark enemies to take extra damage.", strong: "Marked: their hits mark enemies much more often." },
 };
 
 // Stronger versions. When a tower ALREADY has the effect a combo would give it (a hawk can already
@@ -328,6 +333,34 @@ export const COMBO_STRONGER = {
   slowFactor: 0.7,         // Desserts: slow factor multiplier (smaller = slower enemies)
   knockback: 1.6,          // Vehicles: Knockback distance multiplier
 };
+
+// =====================================================================================
+// THEMES (added 2026-11-12)
+// Places where things are found together. 3 or more towers of a theme that touch (8 around) and
+// are 3 or more DIFFERENT kinds of thing (chef + oven + pressure cooker, not oven + oven + oven) form
+// the theme. Every tower in it gets the theme bonus, on top of any combo. Members: tools/themes.py.
+// Theme bonuses are deliberately odder than combo bonuses. Numbers for each are in `n`.
+// =====================================================================================
+export const THEMES = {
+  kitchen:    { name: "Kitchen",    color: "#f97316", n: { every: 4, dmg: 1.0, radius: 1.2 },  desc: "Food fight: every few attacks also lobs a pie at a random enemy in range." },
+  farm:       { name: "Farm",       color: "#84cc16", n: { goldPerKill: 3 },                  desc: "Harvest: at the end of every wave, pays extra gold for every kill these towers made." },
+  graveyard:  { name: "Graveyard",  color: "#7c3aed", n: { radius: 0.9, time: 5 },             desc: "Haunting: enemies they kill leave a haunted spot that curses anything walking through it." },
+  pirate:     { name: "Pirate Ship", color: "#a16207", n: { chance: 0.25, gold: 5 },           desc: "Plunder: kills sometimes drop a whole chest of gold." },
+  circus:     { name: "Circus",     color: "#ec4899", n: { share: 0.7, range: 2.5 },           desc: "Juggling act: their shots bounce on to another enemy." },
+  hospital:   { name: "Hospital",   color: "#ef4444", n: { hearts: 1 },                       desc: "Triage: gives you back a heart at the end of every wave." },
+  castle:     { name: "Castle",     color: "#64748b", n: { range: 1 },                        desc: "Fortress: nothing can stun or frighten these towers, and they see further." },
+  beach:      { name: "Beach",      color: "#0ea5e9", n: { every: 10, radius: 2, cells: 1 },   desc: "High tide: every so often a wave washes nearby enemies back down the path." },
+  space:      { name: "Space",      color: "#1e40af", n: { chance: 0.25, time: 1 },            desc: "Zero gravity: hits sometimes float enemies off the ground, and these towers can hit flyers." },
+  workshop:   { name: "Workshop",   color: "#b45309", n: {},                                   desc: "Tinkering: every wave each tower bolts on a random extra trick for that wave." },
+  garden:     { name: "Garden",     color: "#16a34a", n: { radius: 1.3, slow: 0.6 },           desc: "Overgrowth: enemies near these towers get tangled and slowed." },
+  wildwest:   { name: "Wild West",  color: "#d97706", n: { dmg: 3 },                          desc: "Quick draw: the first shot at every enemy hits three times as hard." },
+  laboratory: { name: "Laboratory", color: "#22d3ee", n: {},                                   desc: "Mutation: every hit adds a random effect: burn, poison, slow, curse or stun." },
+  winter:     { name: "Winter",     color: "#bae6fd", n: { every: 8, radius: 2, time: 1.5 },   desc: "Blizzard: every so often freezes the enemies around these towers." },
+  school:     { name: "School",     color: "#facc15", n: { perWave: 0.03, max: 0.6 },          desc: "Studying: these towers get a little stronger for every wave they spend together." },
+  concert:    { name: "Concert",    color: "#a855f7", n: { echoes: 2, share: 0.35, gap: 0.25 }, desc: "Encore: every attack is repeated twice more, quieter." },
+};
+// Workshop tricks a tower can draw at the start of a wave.
+export const WORKSHOP_TRICKS = ["Burst", "Echo", "Explode", "Lucky", "Shatter", "Execute", "Monstrous"];
 
 export const ELEMENT_COLORS = {
   Physical: "#6b7280", Magic: "#a855f7", Fire: "#f97316", Ice: "#38bdf8", Poison: "#84cc16",

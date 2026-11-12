@@ -7,7 +7,7 @@
 // Numbers come from config.js. Tags are explained in GDD.md.
 // =====================================================================================
 
-import { CONFIG, ELEMENT_COLORS, COMBOS, COMBO_STRONGER } from "./config.js";
+import { CONFIG, ELEMENT_COLORS, COMBOS, COMBO_STRONGER, THEMES, WORKSHOP_TRICKS } from "./config.js";
 import { db, loadPack, randomSubject, enemyTagsFor } from "./data.js";
 import { pickDrawing } from "./search.js";
 import { sfx } from "./audio.js";
@@ -434,6 +434,7 @@ export function towerStats(tags) {
 export function refreshAuras() {
   refreshCopycats();
   refreshCombos();
+  refreshThemes();
   for (const t of state.towers) t.aura = { dmg: 1, rate: 1, range: 0, imbue: [] };
   for (const s of state.towers) {
     if (s.stats.shape !== "Support") continue;
@@ -471,8 +472,128 @@ function refreshCopycats() {
 const NO_AURA = { dmg: 1, rate: 1, range: 0, imbue: [] };
 const auraOf = (tower) => (tower.jammed ? NO_AURA : tower.aura);
 
-/** Reach of a tower in cells, including Reach auras and combo range. */
-export const towerRange = (tower) => tower.stats.range + auraOf(tower).range + tower.combo.range;
+/** Reach of a tower in cells, including Reach auras, combo range and the Castle theme. */
+export const towerRange = (tower) => tower.stats.range + auraOf(tower).range + tower.combo.range +
+  (hasTheme(tower, "castle") ? THEMES.castle.n.range : 0);
+
+// ------------------------------------------------------------------------------------
+// THEMES
+// ------------------------------------------------------------------------------------
+
+const hasTheme = (tower, id) => !!(tower.themes && tower.themes.includes(id));
+let themeKeys = new Set();     // groups already announced, so only NEW themes pop up
+
+/**
+ * Find every theme. For each theme, towers that belong to it link to touching towers (8 around)
+ * that also belong to it AND are a different kind of thing and a different sprite. A connected
+ * group with 3 or more different kinds forms the theme; every tower in the group gets it.
+ */
+function refreshThemes() {
+  const before = new Map(state.towers.map((t) => [t, t.themes || []]));
+  for (const t of state.towers) t.themes = [];
+  state.themeGroups = [];
+  const keys = new Set();
+  for (const id of Object.keys(THEMES)) {
+    const members = state.towers.filter((t) => t.subject.themes && t.subject.themes.includes(id));
+    if (members.length < 3) continue;
+    const seen = new Set();
+    for (const start of members) {
+      if (seen.has(start)) continue;
+      const group = [start];
+      seen.add(start);
+      for (let q = 0; q < group.length; q++) {
+        const a = group[q];
+        for (const b of members) {
+          if (seen.has(b) || Math.abs(a.x - b.x) > 1 || Math.abs(a.y - b.y) > 1) continue;
+          if (a.subject.kind === b.subject.kind || a.subject.name === b.subject.name) continue;
+          seen.add(b); group.push(b);
+        }
+      }
+      const kinds = new Set(group.map((t) => t.subject.kind));
+      if (group.length < 3 || kinds.size < 3) continue;
+      for (const t of group) t.themes.push(id);
+      const key = id + ":" + group.map((t) => t.id).sort((p, q) => p - q).join(",");
+      keys.add(key);
+      state.themeGroups.push({ id, towers: group, key });
+      // announce only a theme that is new here, not a group that just grew
+      if (!themeKeys.has(key) && !group.some((t) => (before.get(t) || []).includes(id))) {
+        const cx = group.reduce((s, t) => s + t.x, 0) / group.length, cy = group.reduce((s, t) => s + t.y, 0) / group.length;
+        state.fx.push({ kind: "text", x: cx, y: cy - 0.4, text: THEMES[id].name.toUpperCase() + " THEME", color: THEMES[id].color, scale: 1, life: 1.8, max: 1.8 });
+        burst(cx, cy, 14, [THEMES[id].color, "#ffffff"]);
+        sfx.theme();
+      }
+    }
+  }
+  themeKeys = keys;
+}
+
+/** Start-of-wave theme work: Workshop towers draw a random trick for this wave. */
+function themesStartWave() {
+  for (const t of state.towers) {
+    if (t.workshopTrick) { t.workshopTrick = null; t.stats = towerStats(t.copying ? t.copying.tags.concat("Copycat") : t.tags); }
+    if (!hasTheme(t, "workshop") || t.stats.shape === "Support") continue;
+    const options = WORKSHOP_TRICKS.filter((x) => !t.tags.includes(x));
+    t.workshopTrick = options[Math.floor(Math.random() * options.length)];
+    t.stats = towerStats((t.copying ? t.copying.tags.concat("Copycat") : t.tags).concat(t.workshopTrick));
+    floatText(t.x, t.y - 0.45, t.workshopTrick.toUpperCase(), THEMES.workshop.color, 0.7);
+  }
+  for (const t of state.towers) t.farmKills = 0;
+}
+
+/** End-of-wave theme payouts: Farm harvest, Hospital hearts, School study. */
+function themesEndWave() {
+  for (const g of state.themeGroups || []) {
+    const cx = g.towers.reduce((s, t) => s + t.x, 0) / g.towers.length, cy = g.towers.reduce((s, t) => s + t.y, 0) / g.towers.length;
+    if (g.id === "farm") {
+      const kills = g.towers.reduce((s, t) => s + (t.farmKills || 0), 0);
+      const gold = kills * THEMES.farm.n.goldPerKill;
+      if (gold) { state.gold += gold; floatText(cx, cy - 0.5, `HARVEST +${gold}`, THEMES.farm.color, 0.9); }
+    }
+    if (g.id === "hospital" && state.hearts < CONFIG.run.hearts) {
+      state.hearts = Math.min(CONFIG.run.hearts, state.hearts + THEMES.hospital.n.hearts);
+      floatText(cx, cy - 0.5, "+1 heart", THEMES.hospital.color, 0.9);
+    }
+  }
+  for (const t of state.towers) if (hasTheme(t, "school")) t.study = Math.min(THEMES.school.n.max, (t.study || 0) + THEMES.school.n.perWave);
+}
+
+/** Per-frame theme effects that do not belong to a single attack: Beach tide, Winter blizzard, Garden slow, haunted spots. */
+function updateThemes(dt) {
+  const now = state.time;
+  for (const t of state.towers) {
+    if (hasTheme(t, "beach")) {
+      const n = THEMES.beach.n;
+      t.tideT = (t.tideT ?? n.every * Math.random()) - dt;
+      if (t.tideT <= 0) {
+        t.tideT = n.every;
+        let any = false;
+        for (const e of state.enemies) if (!e.flying && Math.hypot(e.x - t.x, e.y - t.y) <= n.radius) { e.kbImmuneUntil = 0; pushEnemy(e, n.cells); any = true; }
+        if (any) state.fx.push({ kind: "ring", x: t.x, y: t.y, r: n.radius, color: THEMES.beach.color, life: 0.5, max: 0.5 });
+      }
+    }
+    if (hasTheme(t, "winter")) {
+      const n = THEMES.winter.n;
+      t.blizzardT = (t.blizzardT ?? n.every * Math.random()) - dt;
+      if (t.blizzardT <= 0) {
+        t.blizzardT = n.every;
+        let any = false;
+        for (const e of state.enemies) if (Math.hypot(e.x - t.x, e.y - t.y) <= n.radius) { stunEnemy(e, n.time); any = true; }
+        if (any) { state.fx.push({ kind: "ring", x: t.x, y: t.y, r: n.radius, color: "#e0f2fe", life: 0.5, max: 0.5 }); sfx.freeze(); }
+      }
+    }
+  }
+  const gardens = state.towers.filter((t) => hasTheme(t, "garden"));
+  if (gardens.length) {
+    const n = THEMES.garden.n;
+    for (const e of state.enemies) if (!e.flying && gardens.some((t) => Math.hypot(e.x - t.x, e.y - t.y) <= n.radius)) slowEnemy(e, n.slow, 0.2);
+  }
+  if (state.haunts && state.haunts.length) {
+    state.haunts = state.haunts.filter((h) => now < h.until);
+    for (const h of state.haunts) for (const e of state.enemies) {
+      if (Math.hypot(e.x - h.x, e.y - h.y) <= h.r) { e.curseMult = Math.max(e.curseMult || 0, CONFIG.elements.Dark.curse); e.curseUntil = Math.max(e.curseUntil, now + 0.3); }
+    }
+  }
+}
 
 // ------------------------------------------------------------------------------------
 // COMBOS
@@ -487,7 +608,6 @@ function noCombo() {
   };
 }
 
-let comboPairs = new Set();   // "towerId-towerId-category" for every linked pair, to spot NEW combos
 
 /**
  * Find every combo. Two towers link when they stand on neighbouring blocks (8 around), share a
@@ -495,26 +615,53 @@ let comboPairs = new Set();   // "towerId-towerId-category" for every linked pai
  * New links pop a label between the two towers and play a sound.
  */
 function refreshCombos() {
-  const pairs = new Set();
-  const fresh = [];
-  for (const t of state.towers) { t.combos = []; t.links = []; }
-  for (let i = 0; i < state.towers.length; i++) {
-    const a = state.towers[i];
-    for (let j = i + 1; j < state.towers.length; j++) {
-      const b = state.towers[j];
-      if (Math.abs(a.x - b.x) > 1 || Math.abs(a.y - b.y) > 1) continue;
-      if (a.subject.name === b.subject.name) continue;          // the same sprite twice is not a combo
-      for (const cat of a.subject.categories) {
-        if (!b.subject.categories.includes(cat) || !COMBOS[cat]) continue;
-        const key = Math.min(a.id, b.id) + "-" + Math.max(a.id, b.id) + "-" + cat;
-        pairs.add(key);
-        if (!comboPairs.has(key)) fresh.push({ a, b, cat });
-        if (!a.combos.includes(cat)) a.combos.push(cat);
-        if (!b.combos.includes(cat)) b.combos.push(cat);
-        a.links.push({ to: b, cat });
-        b.links.push({ to: a, cat });
-      }
+  // Lock-in: a tower belongs to ONE combo at a time (tower.lockCat). Once it joins a combo it stays in
+  // it while at least one neighbour is still locked into the same combo. It is freed only when that
+  // link is broken (the partner is sold or moved), and can then join a different combo.
+  const towers = state.towers.slice().sort((p, q) => p.id - q.id);          // oldest first
+  const near = (a, b) => a !== b && Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1 && a.subject.name !== b.subject.name;
+  const fits = (t, cat) => t.subject.categories.includes(cat) && COMBOS[cat];
+  // 1. drop locks that lost every partner (repeat, since one drop can strand another tower)
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const t of towers) {
+      if (!t.lockCat) continue;
+      if (!towers.some((o) => near(t, o) && o.lockCat === t.lockCat)) { t.lockCat = null; changed = true; }
     }
+  }
+  // 2. free towers join a combo: an existing combo first, then the one with the most matching
+  //    neighbours, then the one with the oldest tower
+  const fresh = [];
+  // newest first, so the tower just placed makes the choice (and can join an existing combo)
+  for (const t of towers.slice().reverse()) {
+    if (t.lockCat) continue;
+    let best = null;
+    for (const cat of t.subject.categories) {
+      if (!COMBOS[cat]) continue;
+      const locked = towers.filter((o) => near(t, o) && o.lockCat === cat);
+      const free = towers.filter((o) => near(t, o) && !o.lockCat && fits(o, cat));
+      if (!locked.length && !free.length) continue;
+      const oldest = Math.min(...locked.concat(free).map((o) => o.id));
+      const option = { cat, existing: locked.length > 0, count: locked.length + free.length, oldest, free };
+      if (!best || (option.existing && !best.existing) ||
+          (option.existing === best.existing && (option.count > best.count || (option.count === best.count && option.oldest < best.oldest)))) best = option;
+    }
+    if (!best) continue;
+    t.lockCat = best.cat;
+    if (!best.existing) {                       // a brand new combo: the oldest free partner joins too
+      const partner = best.free.reduce((p, q) => (q.id < p.id ? q : p));
+      partner.lockCat = best.cat;
+      fresh.push({ a: t, b: partner, cat: best.cat });
+    } else {
+      const partner = towers.find((o) => near(t, o) && o.lockCat === best.cat);
+      fresh.push({ a: t, b: partner, cat: best.cat });
+    }
+  }
+  // 3. links and bonuses
+  for (const t of state.towers) { t.combos = t.lockCat ? [t.lockCat] : []; t.links = []; }
+  for (const t of state.towers) {
+    if (!t.lockCat) continue;
+    for (const o of state.towers) if (near(t, o) && o.lockCat === t.lockCat) t.links.push({ to: o, cat: t.lockCat });
   }
   for (const t of state.towers) {
     const c = noCombo();
@@ -528,6 +675,10 @@ function refreshCombos() {
       if (bonus.gold) c.gold *= bonus.gold;
       if (bonus.imbue && !c.imbue.includes(bonus.imbue)) c.imbue.push(bonus.imbue);
       for (const flag of ["antiAir", "slow", "knockback", "pierceArmor", "blastProof"]) if (bonus[flag]) c[flag] = true;
+      // chance-based bonuses (Rocks, Toys, Signs): doubled if the tower already does that thing
+      if (bonus.stunChance) { c.stunChance = bonus.stunChance * (t.stats.stun ? 2 : 1); if (t.stats.stun) c.strong.push(cat); }
+      if (bonus.confuseChance) { c.confuseChance = bonus.confuseChance * (t.stats.confuse ? 2 : 1); if (t.stats.confuse) c.strong.push(cat); }
+      if (bonus.markChance) { c.markChance = bonus.markChance * (t.stats.tasty ? 2 : 1); if (t.stats.tasty) c.strong.push(cat); }
       // Already has the effect this combo gives? Then it gets the stronger version instead.
       const X = COMBO_STRONGER, own = t.stats;
       const already = (bonus.imbue && own.elems.includes(bonus.imbue)) || (bonus.antiAir && own.antiAir) ||
@@ -546,10 +697,10 @@ function refreshCombos() {
     t.combo = c;
   }
   for (const { a, b, cat } of fresh) {
+    if (!b) continue;
     state.fx.push({ kind: "text", x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 0.35, text: COMBOS[cat].name.toUpperCase() + " COMBO", color: COMBOS[cat].color, scale: 0.85, life: 1.4, max: 1.4 });
   }
   if (fresh.length) sfx.combo();
-  comboPairs = pairs;
 }
 
 // ------------------------------------------------------------------------------------
@@ -601,6 +752,7 @@ export async function startWave() {
   }
   if (state.phase !== "build") return;
   for (const tower of state.towers) tower.locked = true;
+  themesStartWave();
   refreshPaths();
   state.spawnQueue = plan.map((p) => ({ ...p, at: state.time + p.at + (CONFIG.style.enabled ? 1.2 : 0) }));
   state.phase = "wave";
@@ -739,6 +891,7 @@ function endWave() {
       floatText(tower.x, tower.y - 0.3, "+1 heart", "#e11d48");
     }
   }
+  themesEndWave();
   for (const tower of broken) {                                // Glass Cannon: breaks after a few waves, no refund
     state.towers.splice(state.towers.indexOf(tower), 1);
     state.towerAt.delete(cellIndex(tower.x, tower.y));
@@ -770,6 +923,7 @@ export function step(dt) {
 
   while (state.spawnQueue.length && state.spawnQueue[0].at <= state.time) spawnEnemy(state.spawnQueue.shift());
   updateAuras();
+  updateThemes(dt);
   for (const enemy of state.enemies) updateEnemy(enemy, dt);
   for (const tower of state.towers) updateTower(tower, dt);
   updateShots(dt);
@@ -791,7 +945,7 @@ function updateAuras() {
   const jammers = state.enemies.filter((e) => e.jammer && !e.dead);
   const rallies = state.enemies.filter((e) => e.rally && !e.dead);
   for (const t of state.towers) {
-    t.scared = scary.some((e) => Math.hypot(e.x - t.x, e.y - t.y) <= X.scaryRange);
+    t.scared = !hasTheme(t, "castle") && scary.some((e) => Math.hypot(e.x - t.x, e.y - t.y) <= X.scaryRange);
     t.jammed = jammers.some((e) => Math.hypot(e.x - t.x, e.y - t.y) <= X.jammerRange);
   }
   for (const e of state.enemies) e.rallied = rallies.some((r) => r !== e && Math.hypot(r.x - e.x, r.y - e.y) <= X.rallyRange);
@@ -929,7 +1083,7 @@ function landGlider(e) {
 function canAffect(tower, e, dist) {
   if (e.dead) return false;
   if (e.underground && !tower.stats.area) return false;           // Digger: only area attacks reach it
-  if (e.flying && !tower.stats.antiAir && !tower.combo.antiAir) return false;
+  if (e.flying && !tower.stats.antiAir && !tower.combo.antiAir && !hasTheme(tower, "space")) return false;
   if (!e.flying && tower.stats.airOnly) return false;              // Anti-Air: flyers only
   if (e.stealth && !tower.stats.holy && dist > E.stealthReveal) return false;
   return true;
@@ -1057,6 +1211,16 @@ function updateTower(tower, dt) {
   if (s.echo) {
     tower.queue = tower.queue || [];
     tower.queue.push({ at: now + X.echoDelay, target, mult: X.echoDamage, echo: true });
+  }
+  if (hasTheme(tower, "concert")) {                     // Encore: two quieter repeats
+    const n = THEMES.concert.n;
+    tower.queue = tower.queue || [];
+    for (let k = 1; k <= n.echoes; k++) tower.queue.push({ at: now + k * n.gap, target, mult: n.share, echo: true });
+  }
+  if (hasTheme(tower, "kitchen") && tower.attacks % THEMES.kitchen.n.every === 0) {   // Food fight: lob a pie
+    const pool = enemiesInRange(tower, towerRange(tower));
+    const victim = pool[Math.floor(Math.random() * pool.length)];
+    if (victim) state.shots.push({ kind: "splash", pie: true, tower, dmg: s.dmg * THEMES.kitchen.n.dmg, x: tower.x, y: tower.y, target: victim, tx: victim.x, ty: victim.y, color: "#fde68a" });
   }
 }
 
@@ -1226,15 +1390,17 @@ function updateShots(dt) {
     } else if (shot.target && !shot.target.dead) {
       const victim = shot.target;
       applyHit(shot.tower, victim, shot.dmg, {});
-      if (shot.kind === "ricochet" && !shot.bounced) {                         // one bounce to the nearest other enemy
+      const circus = hasTheme(shot.tower, "circus") && !shot.bounced && !shot.pie;
+      if ((shot.kind === "ricochet" || circus) && !shot.bounced) {             // one bounce to the nearest other enemy
         const R = T.shapes.Ricochet;
-        let next = null, nd = R.bounceRange;
+        let next = null, nd = shot.kind === "ricochet" ? R.bounceRange : THEMES.circus.n.range;
         for (const e of state.enemies) {
           if (e === victim || e.dead || !canAffect(shot.tower, e, 0)) continue;
           const d = Math.hypot(e.x - victim.x, e.y - victim.y);
           if (d < nd) { nd = d; next = e; }
         }
-        if (next) state.shots.push({ kind: "ricochet", tower: shot.tower, dmg: shot.dmg * R.bounceShare, x: victim.x, y: victim.y, target: next, tx: next.x, ty: next.y, color: shot.color, bounced: true });
+        const share = shot.kind === "ricochet" ? R.bounceShare : THEMES.circus.n.share;
+        if (next) state.shots.push({ kind: "ricochet", tower: shot.tower, dmg: shot.dmg * share, x: victim.x, y: victim.y, target: next, tx: next.x, ty: next.y, color: shot.color, bounced: true });
       }
     }
   }
@@ -1258,7 +1424,11 @@ function applyHit(tower, e, dmg, opts) {
     floatText(e.x, e.y - 0.4, "miss", "#94a3b8", 0.7);
     return;
   }
-  let total = dmg * auraOf(tower).dmg * tower.combo.dmg * (1 + (tower.trophy || 0));
+  let total = dmg * auraOf(tower).dmg * tower.combo.dmg * (1 + (tower.trophy || 0)) * (1 + (hasTheme(tower, "school") ? tower.study || 0 : 0));
+  if (hasTheme(tower, "wildwest")) {                     // Quick draw: first shot at each enemy
+    e.drawnBy = e.drawnBy || new Set();
+    if (!e.drawnBy.has(tower.id)) { e.drawnBy.add(tower.id); total *= THEMES.wildwest.n.dmg; floatText(e.x, e.y - 0.6, "DRAW!", THEMES.wildwest.color, 0.7); }
+  }
   if (e.flying) total *= tower.combo.flyerDamage;          // Birds combo, stronger version
   if (e.flying && s.airOnly) total *= X.antiAirDamage;     // Anti-Air
   if (s.shatter && (now < e.slowUntil || now < e.stunUntil || now < e.sleepUntil)) total *= X.shatterDamage;
@@ -1284,8 +1454,10 @@ function applyHit(tower, e, dmg, opts) {
     return;
   }
   applyStatuses(tower, e, dealt);
+  if (hasTheme(tower, "space") && Math.random() < THEMES.space.n.chance) stunEnemy(e, THEMES.space.n.time);   // Zero gravity
+  if (hasTheme(tower, "laboratory")) mutate(tower, e, dealt);
   // Spiky: a Melee tower that hits it is stunned for a moment
-  if (e.spiky && s.rangeTag === "Melee") {
+  if (e.spiky && s.rangeTag === "Melee" && !hasTheme(tower, "castle")) {
     tower.stunUntil = Math.max(tower.stunUntil, now + CONFIG.enemyX.spikyStun);
     tower.spiked = now + CONFIG.enemyX.spikyStun;
   }
@@ -1369,6 +1541,11 @@ function applyStatuses(tower, e, dealt) {
     if (!e.bleed || dps >= e.bleed.dps) e.bleed = { dps, until: now + T.bleedTime * m, color: "#dc2626" };
   }
   if (s.knockback || tower.combo.knockback) pushEnemy(e, T.knockback * tower.combo.knockback2);
+  if (tower.combo.stunChance && Math.random() < tower.combo.stunChance) stunEnemy(e, T.stunTime * m);          // Rocks combo
+  if (tower.combo.confuseChance && !e.unstoppable && !e.flying && now >= e.confuseImmuneUntil && Math.random() < tower.combo.confuseChance) {   // Toys combo
+    e.confuseUntil = now + X.confuseTime; e.confuseImmuneUntil = now + X.confuseTime + X.confuseImmune;
+  }
+  if (tower.combo.markChance && Math.random() < tower.combo.markChance) e.markUntil = Math.max(e.markUntil, now + X.tastyTime);   // Signs combo
   if (s.shred) e.shredded = true;
   // special tags
   if (s.timewarp && !tower.warpT) { tower.warpT = X.timewarpEvery; timewarp(e); }
@@ -1382,6 +1559,17 @@ function applyStatuses(tower, e, dealt) {
     const t = X.confuseTime * m * (e.boss ? CONFIG.boss.control : 1);
     e.confuseUntil = now + t; e.confuseImmuneUntil = now + t + X.confuseImmune;
   }
+}
+
+/** Laboratory theme: a random extra effect on every hit. */
+function mutate(tower, e, dealt) {
+  const C = CONFIG.elements, now = state.time;
+  const pick = Math.floor(Math.random() * 5);
+  if (pick === 0) { const dps = (dealt * C.Fire.burnShare) / C.Fire.burnTime; if (!e.burn || dps >= e.burn.dps) e.burn = { dps, until: now + C.Fire.burnTime, color: ELEMENT_COLORS.Fire }; }
+  else if (pick === 1) { const dps = (dealt * C.Poison.share) / C.Poison.time; e.poison = { dps: Math.max(dps, e.poison ? e.poison.dps : 0), stacks: Math.min(C.Poison.maxStacks, (e.poison ? e.poison.stacks : 0) + 1), until: now + C.Poison.time, color: ELEMENT_COLORS.Poison }; }
+  else if (pick === 2) slowEnemy(e, C.Ice.slow, C.Ice.time);
+  else if (pick === 3) { e.curseMult = Math.max(e.curseMult || 0, C.Dark.curse); e.curseUntil = now + C.Dark.time; }
+  else stunEnemy(e, 0.4);
 }
 
 /** Timewarp: the enemy is sent back down the path in a flash. */
@@ -1456,6 +1644,13 @@ function killEnemy(e, tower) {
   if (tower) gold *= tower.combo.gold;                 // Treasure and Townsfolk combos
   let lucky = false;
   if (tower && tower.stats.lucky && Math.random() < X.luckyGoldChance) { gold *= X.luckyGold; lucky = true; }
+  let plunder = false;
+  if (tower && hasTheme(tower, "pirate") && Math.random() < THEMES.pirate.n.chance) { gold *= THEMES.pirate.n.gold; plunder = true; }
+  if (tower && hasTheme(tower, "farm")) tower.farmKills = (tower.farmKills || 0) + 1;
+  if (tower && hasTheme(tower, "graveyard")) {
+    state.haunts = state.haunts || [];
+    state.haunts.push({ x: e.x, y: e.y, r: THEMES.graveyard.n.radius, until: state.time + THEMES.graveyard.n.time });
+  }
   if (e.child) gold /= 3;
   if (e.boss) gold *= CONFIG.boss.gold;
   gold = Math.max(1, Math.round(gold));
@@ -1468,8 +1663,9 @@ function killEnemy(e, tower) {
   }
   floatText(e.x, e.y - 0.1, `+${gold}`, "#ca8a04", 0.85);
   if (lucky) floatText(e.x, e.y - 0.55, "LUCKY", "#22c55e", 0.85);
+  if (plunder) floatText(e.x, e.y - 0.75, "PLUNDER!", THEMES.pirate.color, 0.85);
   state.fx.push({ kind: "pop", x: e.x, y: e.y, r: e.size * 0.6, color: "#3b4252", life: 0.25, max: 0.25 });
-  const shiny = e.rich || e.boss || e.pinata || lucky;
+  const shiny = e.rich || e.boss || e.pinata || lucky || plunder;
   burst(e.x, e.y, e.boss ? 60 : e.pinata ? 30 : shiny ? 12 : 5, e.pinata ? ["#f43f5e", "#facc15", "#22c55e", "#38bdf8", "#a855f7"] : shiny ? ["#facc15", "#fde68a", "#f43f5e"] : ["#facc15", "#ffffff", "#94a3b8"]);
   if (e.boss) { bigText("BOSS DOWN", `+${gold} gold`, "#f43f5e", 1.8); sfx.bossDown(); }
   sfx.kill();
@@ -1494,7 +1690,7 @@ function killEnemy(e, tower) {
   if (e.explosive) {
     state.fx.push({ kind: "ring", x: e.x, y: e.y, r: E.explodeRange, color: "#f97316", life: 0.4, max: 0.4 });
     for (const t of state.towers) {
-      if (Math.hypot(t.x - e.x, t.y - e.y) <= E.explodeRange && !t.combo.blastProof) t.stunUntil = state.time + E.explodeStun;
+      if (Math.hypot(t.x - e.x, t.y - e.y) <= E.explodeRange && !t.combo.blastProof && !hasTheme(t, "castle")) t.stunUntil = state.time + E.explodeStun;
     }
     sfx.boom();
   }

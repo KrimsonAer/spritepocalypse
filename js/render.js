@@ -4,7 +4,7 @@
 // Sprites are 16x16 and drawn with smoothing off so they stay crisp at any size.
 // =====================================================================================
 
-import { CONFIG, ELEMENT_COLORS, COMBOS } from "./config.js";
+import { CONFIG, ELEMENT_COLORS, COMBOS, THEMES } from "./config.js";
 import { state, cellIndex, towerRange, towerStats } from "./game.js";
 
 const B = CONFIG.board;
@@ -157,6 +157,7 @@ export function draw() {
     }
   }
   drawComboBlocks(g);
+  drawThemeBorders(g);
 
   // hover highlight
   if (view.hover && state.phase !== "menu" && state.phase !== "over") {
@@ -345,6 +346,35 @@ function drawComboBlocks(g) {
 
 // Range circle for a selected or about-to-be-placed tower.
 // Spin has none (its blades show their own reach). Artillery has the dead zone cut out of the middle.
+// Themes: a border around the outside of the group's blocks, in the theme colour (combos fill,
+// themes outline). A tower in several themes gets nested borders, each a little further in.
+function drawThemeBorders(g) {
+  const s = view.cell;
+  const lw = Math.max(3, Math.round(s * 0.08));
+  const depth = new Map();                      // borders already drawn on each cell
+  for (const grp of state.themeGroups || []) {
+    const cells = new Set(grp.towers.map((t) => t.x + "," + t.y));
+    const has = (x, y) => cells.has(x + "," + y);
+    let inset = 0;
+    for (const t of grp.towers) inset = Math.max(inset, depth.get(t.x + "," + t.y) || 0);
+    const o = lw / 2 + 1 + inset * (lw + 1);    // how far inside the cell edge this border runs
+    g.strokeStyle = THEMES[grp.id].color;
+    g.lineWidth = lw;
+    g.lineCap = "square";
+    g.beginPath();
+    // only the edges between a group cell and a non-group cell, so the border wraps the whole group
+    for (const t of grp.towers) {
+      const x0 = t.x * s, y0 = t.y * s, x1 = x0 + s, y1 = y0 + s;
+      if (!has(t.x, t.y - 1)) { g.moveTo(x0 + (has(t.x - 1, t.y) ? 0 : o), y0 + o); g.lineTo(x1 - (has(t.x + 1, t.y) ? 0 : o), y0 + o); }
+      if (!has(t.x, t.y + 1)) { g.moveTo(x0 + (has(t.x - 1, t.y) ? 0 : o), y1 - o); g.lineTo(x1 - (has(t.x + 1, t.y) ? 0 : o), y1 - o); }
+      if (!has(t.x - 1, t.y)) { g.moveTo(x0 + o, y0 + (has(t.x, t.y - 1) ? 0 : o)); g.lineTo(x0 + o, y1 - (has(t.x, t.y + 1) ? 0 : o)); }
+      if (!has(t.x + 1, t.y)) { g.moveTo(x1 - o, y0 + (has(t.x, t.y - 1) ? 0 : o)); g.lineTo(x1 - o, y1 - (has(t.x, t.y + 1) ? 0 : o)); }
+    }
+    g.stroke();
+    for (const t of grp.towers) depth.set(t.x + "," + t.y, inset + 1);
+  }
+}
+
 function rangeRing(g, x, y, range, color, shape) {
   if (shape === "Spin") return;
   const cx = centre(x), cy = centre(y);

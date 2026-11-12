@@ -338,7 +338,8 @@ canvas, .sprite { image-rendering: pixelated; image-rendering: crisp-edges; }
 .free-pips i { width: 0.6em; height: 0.6em; flex: none; background: #bbf7d0; border: 2px solid #14532d; }
 .free-pips i.on { background: #22c55e; }
 .free b { font-size: 1.5em; font-weight: 400; line-height: 1; }
-.free.pop { animation: stat-glow 0.32s steps(4); }
+.free.pop { animation: free-pop 0.32s steps(4); }
+@keyframes free-pop { 0% { background: #86efac; } 100% { background: #dcfce7; } }
 
 /* ---------------------------------------------------------------- phones and tall screens
    ui.js puts the wave controls in a bar under the board ("bottom") or in a column beside it ("side"),
@@ -376,3 +377,25 @@ canvas, .sprite { image-rendering: pixelated; image-rendering: crisp-edges; }
 #app.compact .card { min-height: 4em; }
 #app.compact .card .sprite { width: 2.8em; height: 2.8em; }
 #app.compact .card-empty { font-size: 0.8em; }
+
+/* Phones: the card keeps ONE fixed height whether it is empty, shows a found sprite or a placed
+   tower, so the board above never resizes when you tap something. Long tag lists are clipped. */
+#app.compact .card { height: 5.3em; min-height: 0; overflow: hidden; align-content: center; padding: 0.25em 0.35em; }
+#app.compact .card-body { min-width: 0; max-height: 100%; overflow: hidden; }
+#app.compact .card .tags { margin-top: 0.15em; gap: 0.2em; }
+#app.compact .card .tag { font-size: 0.78em; padding: 0 0.3em; }
+#app.compact .card-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.1em; }
+#app.compact .card-actions .px-btn { padding: 0.25em 0.45em; }
+#app.compact .info-row { height: 2.4em; }
+#app.compact #msg { max-height: 2.4em; overflow: hidden; }
+#app.compact .card .sprite { width: 2.7em; height: 2.7em; }
+#app.compact .card-name { font-size: 1em; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#app.compact .card-actions { gap: 0.15em; }
+#app.compact .card-actions .px-btn { font-size: 0.72em; padding: 0.2em 0.4em; }
+#app.compact #search { font-size: 1em; padding: 0.25em 0.45em; }
+#app.compact #search-form .px-btn { padding: 0.25em 0.55em; }
+#app.compact .info-row { height: 2.1em; }
+#app.compact #msg { font-size: 0.85em; max-height: 2.5em; }
+
+/* theme chip on the tower card: outlined in the theme colour (combo chips are filled) */
+.tag.theme { color: var(--ink); background: #fff; border: 2px solid var(--c); box-shadow: inset 0 0 0 1px var(--c); }

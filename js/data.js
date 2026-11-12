@@ -32,7 +32,7 @@ export async function loadIndex() {
     else if (t) console.warn("lookup.json is out of date, re-run tools/build_lookup.py");
   }).catch(() => {});
   index.subjects.forEach((row, id) => {
-    const [name, count, t, e, k] = row;
+    const [name, count, t, e, k, th, kind] = row;
     const subject = {
       id, name, count,
       words: name.split(" "),
@@ -40,6 +40,8 @@ export async function loadIndex() {
       towerTags: Array.isArray(t) ? t : t ? t.split(" ") : [],
       enemyTags: Array.isArray(e) ? e : e ? e.split(" ") : [],
       categories: Array.isArray(k) ? k : k ? k.split(" ") : [],     // combo categories (see COMBOS in config.js)
+      themes: th || [],                     // themes it belongs to (see THEMES in config.js)
+      kind: kind || name,                   // what sort of thing it is; a theme needs 3 different kinds
     };
     db.subjects.push(subject);
     db.byName.set(name, subject);
