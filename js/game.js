@@ -906,6 +906,7 @@ function spawnChild(parent, opts) {
   child.path = parent.path;
   child.d = Math.max(0, parent.d - (opts.behind ?? 0.3));
   child.child = true;
+  child.bossOf = parent.boss ? parent : parent.bossOf;     // splits of a boss keep the BOSS DOWN message waiting
   const p = pathPoint(child.path, child.d);
   child.x = p.x; child.y = p.y;
   state.enemies.push(child);
@@ -1710,7 +1711,8 @@ function killEnemy(e, tower) {
   state.fx.push({ kind: "pop", x: e.x, y: e.y, r: e.size * 0.6, color: "#3b4252", life: 0.25, max: 0.25 });
   const shiny = e.rich || e.boss || e.pinata || lucky || plunder;
   burst(e.x, e.y, e.boss ? 60 : e.pinata ? 30 : shiny ? 12 : 5, e.pinata ? ["#f43f5e", "#facc15", "#22c55e", "#38bdf8", "#a855f7"] : shiny ? ["#facc15", "#fde68a", "#f43f5e"] : ["#facc15", "#ffffff", "#94a3b8"]);
-  if (e.boss) { bigText("BOSS DOWN", `+${gold} gold`, "#f43f5e", 1.8); sfx.bossDown(); }
+  const bossFamily = e.boss ? e : e.bossOf;           // the boss, or the boss a split / unloaded copy came from
+  if (bossFamily) bossFamily.familyGold = (bossFamily.familyGold || 0) + gold;
   sfx.kill();
   if (shiny) sfx.coin();
 
@@ -1736,6 +1738,12 @@ function killEnemy(e, tower) {
       if (Math.hypot(t.x - e.x, t.y - e.y) <= E.explodeRange && !t.combo.blastProof && !hasTheme(t, "castle")) t.stunUntil = state.time + E.explodeStun;
     }
     sfx.boom();
+  }
+  // BOSS DOWN only once the boss AND every split or copy that came out of it are dead
+  if (bossFamily && !bossFamily.downShown && !state.enemies.some((o) => o !== e && !o.dead && (o === bossFamily || o.bossOf === bossFamily))) {
+    bossFamily.downShown = true;               // an Explode chain can finish the family twice over
+    bigText("BOSS DOWN", `+${bossFamily.familyGold} gold`, "#f43f5e", 1.8);
+    sfx.bossDown();
   }
 }
 
