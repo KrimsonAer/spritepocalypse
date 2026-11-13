@@ -254,7 +254,7 @@ function findJumpPath() {
 // To reward anything more daring, each lock-in rates the maze from 0 (that zigzag) to 1:
 //   challenge   = how much shorter the route is than the best zigzag route (1 = a straight run)
 //   originality = how little the blocks overlap any zigzag layout (1 = nothing in common)
-//   features    = average of four un-zigzag features: thick walls, diagonal strips, wide gaps, split paths
+//   features    = four un-zigzag features added up (capped at 1): thick walls, diagonal strips, wide gaps, split paths
 //   score       = challenge * challengeWeight + originality * originalityWeight + features * featuresWeight
 // The score picks a word from CONFIG.style.tiers and pays gold in proportion.
 
@@ -296,7 +296,7 @@ export function mazeStyle() {
   }
   const originality = 1 - overlap;
   const feat = mazeFeatures(path);
-  const features = (feat.thickWalls + feat.diagonals + feat.wideGaps + feat.splitPaths) / 4;
+  const features = Math.min(1, feat.thickWalls + feat.diagonals + feat.wideGaps + feat.splitPaths);   // any mix counts
   const score = Math.min(1, challenge * S.challengeWeight + originality * S.originalityWeight + features * S.featuresWeight);
   let tier = 0;
   S.tiers.forEach((t, i) => { if (score >= t.min) tier = i; });

@@ -35,9 +35,9 @@ export const CONFIG = {
   // walls with alternating gaps) to 1 (nothing like it). A word is shown and gold is paid.
   style: {
     enabled: true,
-    challengeWeight: 0.45,   // share of the score that comes from a shorter route than the best zigzag
-    originalityWeight: 0.25, // share that comes from blocks that do not overlap any zigzag layout
-    featuresWeight: 0.3,     // share that comes from un-zigzag features (the four below, averaged)
+    challengeWeight: 0,      // share from a shorter route than the best zigzag (0 since 2026-11-13: long mazes are fine)
+    originalityWeight: 0.5,  // share that comes from blocks that do not overlap any zigzag layout
+    featuresWeight: 0.5,     // share that comes from un-zigzag features (the four below ADDED UP, capped at 1)
     // Each feature scores 0..1: the share of blocks (or path squares) showing it, divided by `full`
     // (the share that counts as "all the way"). A pure zigzag scores 0 on all four.
     features: {
