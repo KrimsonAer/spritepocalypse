@@ -254,7 +254,8 @@ function findJumpPath() {
 // To reward anything more daring, each lock-in rates the maze from 0 (that zigzag) to 1:
 //   challenge   = how much shorter the route is than the best zigzag route (1 = a straight run)
 //   originality = how little the blocks overlap any zigzag layout (1 = nothing in common)
-//   score       = challenge * challengeWeight + originality * originalityWeight
+//   features    = average of four un-zigzag features: thick walls, diagonal strips, wide gaps, split paths
+//   score       = challenge * challengeWeight + originality * originalityWeight + features * featuresWeight
 // The score picks a word from CONFIG.style.tiers and pays gold in proportion.
 
 let zigzags = null;   // cached: the zigzag layouts for this board and the longest route they give
@@ -294,11 +295,49 @@ export function mazeStyle() {
     overlap = Math.max(overlap, either ? both / either : 0);
   }
   const originality = 1 - overlap;
-  const score = Math.min(1, challenge * S.challengeWeight + originality * S.originalityWeight);
+  const feat = mazeFeatures(path);
+  const features = (feat.thickWalls + feat.diagonals + feat.wideGaps + feat.splitPaths) / 4;
+  const score = Math.min(1, challenge * S.challengeWeight + originality * S.originalityWeight + features * S.featuresWeight);
   let tier = 0;
   S.tiers.forEach((t, i) => { if (score >= t.min) tier = i; });
   const gold = Math.round(score * (S.goldMax + S.goldMaxPerWave * (state.wave - 1)));
-  return { score, challenge, originality, tier, word: S.tiers[tier].word, gold };
+  return { score, challenge, originality, features, feat, tier, word: S.tiers[tier].word, gold };
+}
+
+/**
+ * The four un-zigzag features, each 0..1 (see CONFIG.style.features). A pure zigzag scores 0 on all:
+ * its walls are one block deep, run in straight rows, have one-square gaps, and give a single route.
+ */
+function mazeFeatures(path) {
+  const F = CONFIG.style.features;
+  const open = (x, y) => inBoard(x, y) && !state.blocks[cellIndex(x, y)];
+  const cells = [];
+  for (let y = 0; y < B.rows; y++) for (let x = 0; x < B.cols; x++) if (state.blocks[cellIndex(x, y)]) cells.push({ x, y });
+  const share = (n, d, full) => (d ? Math.min(1, n / d / full) : 0);
+  // thick walls: the block is a corner of a filled 2x2 square
+  const inSquare = (c) => [[-1, -1], [0, -1], [-1, 0], [0, 0]].some(([ox, oy]) =>
+    [[0, 0], [1, 0], [0, 1], [1, 1]].every(([dx, dy]) => inBoard(c.x + ox + dx, c.y + oy + dy) && state.blocks[cellIndex(c.x + ox + dx, c.y + oy + dy)]));
+  const thick = cells.filter(inSquare).length;
+  // diagonal strips: a block meets another only at a corner (both squares between them open)
+  const diag = cells.filter((c) => [[1, 1], [1, -1], [-1, 1], [-1, -1]].some(([dx, dy]) =>
+    inBoard(c.x + dx, c.y + dy) && state.blocks[cellIndex(c.x + dx, c.y + dy)] && open(c.x + dx, c.y) && open(c.x, c.y + dy))).length;
+  // wide gaps: along the enemy route, a square with an open square beside it (across the direction of travel)
+  let wide = 0, split = 0;
+  const route = path || [];
+  for (let i = 0; i < route.length; i++) {
+    const a = route[Math.max(0, i - 1)], b = route[Math.min(route.length - 1, i + 1)], c = route[i];
+    const across = a.x !== b.x && a.y === b.y ? [[0, 1], [0, -1]] : a.y !== b.y && a.x === b.x ? [[1, 0], [-1, 0]] : [];
+    if (across.some(([dx, dy]) => open(c.x + dx, c.y + dy))) wide++;
+    // split paths: enemies could still get home with this square blocked (it is not a forced square)
+    if (i > 0 && i < route.length - 1 && findPath(cellIndex(c.x, c.y))) split++;
+  }
+  const inner = Math.max(1, route.length - 2);
+  return {
+    thickWalls: share(thick, cells.length, F.thickWalls.full),
+    diagonals: share(diag, cells.length, F.diagonals.full),
+    wideGaps: share(wide, route.length, F.wideGaps.full),
+    splitPaths: share(split, inner, F.splitPaths.full),
+  };
 }
 
 // ------------------------------------------------------------------------------------

@@ -35,8 +35,17 @@ export const CONFIG = {
   // walls with alternating gaps) to 1 (nothing like it). A word is shown and gold is paid.
   style: {
     enabled: true,
-    challengeWeight: 0.6,    // share of the score that comes from a shorter route than the best zigzag
-    originalityWeight: 0.4,  // share that comes from blocks that do not overlap any zigzag layout
+    challengeWeight: 0.45,   // share of the score that comes from a shorter route than the best zigzag
+    originalityWeight: 0.25, // share that comes from blocks that do not overlap any zigzag layout
+    featuresWeight: 0.3,     // share that comes from un-zigzag features (the four below, averaged)
+    // Each feature scores 0..1: the share of blocks (or path squares) showing it, divided by `full`
+    // (the share that counts as "all the way"). A pure zigzag scores 0 on all four.
+    features: {
+      thickWalls: { full: 0.4 },   // blocks that are part of a filled 2x2 square (walls 2+ deep)
+      diagonals:  { full: 0.4 },   // blocks touching another block only corner to corner
+      wideGaps:   { full: 0.5 },   // path squares with open squares at their sides (openings 2+ wide)
+      splitPaths: { full: 0.5 },   // path squares enemies could route around (forks, loops, islands)
+    },
     goldMax: 60,             // gold for a perfect score in wave 1
     goldMaxPerWave: 10,      // the perfect-score payout grows by this much every wave
     // The word shown for each score band. `min` is the lowest score that earns the word.
