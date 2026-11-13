@@ -53,8 +53,8 @@ const isHome = (x, y) => x === B.home.x && y === B.home.y;
 // RUN
 // ------------------------------------------------------------------------------------
 
-/** Wipe everything and start a fresh run in the build phase. */
-export function newRun() {
+/** Wipe everything and start a fresh run in the build phase. keepMaze = Restart: the blocks stay. */
+export function newRun(keepMaze = false) {
   Object.assign(state, {
     phase: "build", paused: false, loadingWave: false, time: 0,
     hearts: CONFIG.run.hearts, gold: CONFIG.run.startGold, wave: 1, score: 0, kills: 0,
@@ -64,7 +64,7 @@ export function newRun() {
     discovered: { combos: [], themes: [] },   // every combo and theme formed this run, in order
   });
   state.shownTier = -1;      // which layout rating word was last announced (-1 = none yet)
-  state.blocks.fill(0);
+  if (!keepMaze) state.blocks.fill(0);
   state.towerAt.clear();
   refreshPaths();
   refreshAuras();            // clears last run's theme outlines and combo fills (no towers left)

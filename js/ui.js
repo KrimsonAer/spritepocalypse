@@ -139,6 +139,8 @@ export function initUI() {
   $("btn-new").addEventListener("click", beginRun);
   $("btn-restart").addEventListener("click", beginRun);
   $("btn-again").addEventListener("click", beginRun);
+  // Restart: same block maze, back to wave 1 with fresh hearts, gold and free towers
+  for (const id of ["btn-retry-pause", "btn-retry-over"]) $(id).addEventListener("click", () => beginRun(true));
   $("btn-resume").addEventListener("click", togglePause);
   document.querySelectorAll("[data-how]").forEach((el) => { el.innerHTML = HOW_TO_PLAY.map((p) => `<p>${p}</p>`).join(""); });
   document.querySelectorAll('[data-toggle="how"]').forEach((b) => b.addEventListener("click", () => {
@@ -303,17 +305,18 @@ function decorate(overlay) {
   });
 }
 
-function beginRun() {
+function beginRun(keepMaze) {
+  keepMaze = keepMaze === true;          // click handlers pass an event; only an explicit true keeps the maze
   unlockAudio();
   sfx.click();
-  newRun();
+  newRun(keepMaze);
   candidate = null; moveMode = false; armed = false;
   view.armed = null; view.selected = null; view.selectedEnemy = null;
   ["menu", "pause", "over"].forEach((id) => $(id).classList.add("hidden"));
   seen = { hearts: state.hearts, gold: state.gold, wave: state.wave, score: state.score };   // no pops for the reset
   goldOwed = 0;
   showCard();
-  setMsg("Tap squares to draw blocks. Type a word to find a tower.");
+  setMsg(keepMaze ? "Same maze, fresh start. Type a word to find a tower." : "Tap squares to draw blocks. Type a word to find a tower.");
 }
 
 function togglePause() {
