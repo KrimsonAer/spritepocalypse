@@ -4,7 +4,7 @@
 // one small file (about 75 KB) per subject, fetched the first time it is typed or spawned.
 // =====================================================================================
 
-import { CONFIG, CAPTION_ELEMENTS, miniFamilyOf } from "./config.js";
+import { CONFIG, CAPTION_ELEMENTS, miniFamiliesOf, namePairsOf } from "./config.js";
 
 const DATA_URL = "data/";
 
@@ -142,8 +142,8 @@ export function categoriesFor(subject, caption) {
   const cats = subject.categories.slice();
   if (!cats.includes("magic") && captionElements(subject, caption).includes("Magic")) cats.push("magic");
   const out = cats.slice(0, 3);
-  const family = miniFamilyOf(subject.name);       // mini combo family (fire slime -> Slimes), on top of the 3
-  if (family) out.push(family);
+  out.push(...miniFamiliesOf(subject.name));       // mini combo families (fire slime -> Slimes), on top of the 3
+  out.push(...namePairsOf(subject.name));          // name pairs (kiwi bird + kiwi fruit)
   return out;
 }
 

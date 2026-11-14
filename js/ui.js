@@ -242,6 +242,7 @@ function setArmed(on) {
 function comboSizeNote(cat, size) {
   const extra = Math.max(0, Math.min(size, COMBO_SIZE.maxTowers) - 2);
   if (!extra) return `${size} towers linked: link more for a bigger bonus.`;
+  if (COMBOS[cat].pair) return `${size} towers linked: bonus x${(1 + extra * COMBO_SIZE.bonusPerExtra).toFixed(1)}.`;
   const b = COMBOS[cat].bonus;
   const grows = ["dmg", "rate", "range", "crit", "status", "gold", "stunChance", "confuseChance", "pull", "markChance"].some((f) => b[f]);
   const boost = grows ? `bonus x${(1 + extra * COMBO_SIZE.bonusPerExtra).toFixed(1)}` : `+${Math.round(extra * COMBO_SIZE.damagePerExtra * 100)}% damage`;
@@ -429,7 +430,7 @@ function showCard() {
     const combos = (t.combos || []).map((cat) => {
       const size = (t.comboSizes || {})[cat] || 2;
       const tip = ((t.combo.strong || []).includes(cat) && COMBOS[cat].strong ? COMBOS[cat].strong : COMBOS[cat].desc) + " " + comboSizeNote(cat, size);
-      return `<span class="tag combo explains${COMBOS[cat].mini ? " mini" : ""}" style="--c:${COMBOS[cat].color}" data-tip="${tip}">${COMBOS[cat].name.toUpperCase()} ${COMBOS[cat].mini ? "MINI" : "COMBO"} +${size}</span>`;
+      return `<span class="tag combo explains${COMBOS[cat].mini ? " mini" : ""}" style="--c:${COMBOS[cat].color}" data-tip="${tip}">${COMBOS[cat].name.toUpperCase()} ${COMBOS[cat].pair ? "PAIR" : COMBOS[cat].mini ? "MINI" : "COMBO"} +${size}</span>`;
     }).join("");
     // themes show the same way, as an outlined chip (themes outline, combos fill)
     const themes = (t.themes || []).map((id) => `<span class="tag theme explains" style="--c:${THEMES[id].color}" data-tip="${THEMES[id].desc}">${THEMES[id].name.toUpperCase()} THEME</span>`).join("");

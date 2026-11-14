@@ -339,8 +339,9 @@ export const MINI_COMBO = {
   share: 0.5,           // fraction of the parent's number bonuses (0.5 = half)
   flagDamage: 0.1,      // parents with only on/off bonuses (Water, anti-air...) give this much extra damage instead
 };
-// [family word, display name, parent combo]
+// [family word, display name, parent combo, also match names that START with the word ("ghost cat")]
 const MINI_FAMILIES = [
+  ["ghost", "Ghosts", "monsters", true],
   ["slime", "Slimes", "monsters"], ["golem", "Golems", "monsters"], ["dragon", "Dragons", "monsters"], ["elemental", "Elementals", "monsters"],
   ["knight", "Knights", "fighters"], ["warrior", "Warriors", "fighters"],
   ["sword", "Swords", "weapons"], ["axe", "Axes", "weapons"], ["hammer", "Hammers", "weapons"],
@@ -350,9 +351,61 @@ const MINI_FAMILIES = [
   ["boots", "Boots", "clothing"], ["hat", "Hats", "clothing"], ["robe", "Robes", "clothing"], ["mask", "Masks", "clothing"],
   ["pizza", "Pizzas", "food"], ["soup", "Soups", "food"], ["egg", "Eggs", "food"], ["pie", "Pies", "desserts"],
   ["mushroom", "Mushrooms", "plants"], ["cactus", "Cacti", "plants"], ["truck", "Trucks", "vehicles"], ["car", "Cars", "vehicles"],
-  ["cat", "Cats", "land"], ["fish", "Fish", "sea"], ["crown", "Crowns", "treasure"], ["drum", "Drums", "music"], ["ore", "Ores", "rocks"],
+  ["cat", "Cats", "land"], ["fish", "Fish", "sea"], ["crown", "Crowns", "treasure"], ["drum", "Percussion", "music"], ["ore", "Ores", "rocks"],
 ];
-const MINI_EXCLUDE = new Set(["violin bow", "crate of fish", "jar of slime", "jar of eyeballs"]);
+/** Half of a combo's bonus, as mini combos use it (on/off-only combos give a little damage instead). */
+export function miniBonus(parent) {
+  const p = COMBOS[parent], bonus = {};
+  for (const [k, v] of Object.entries(p.bonus)) {
+    if (typeof v !== "number") continue;
+    bonus[k] = k === "status" || k === "gold" ? 1 + (v - 1) * MINI_COMBO.share : v * MINI_COMBO.share;
+  }
+  if (!Object.keys(bonus).length) bonus.dmg = MINI_COMBO.flagDamage;
+  return bonus;
+}
+
+// NAME PAIRS (2026-11-13): two different things that share a name (kiwi bird + kiwi fruit). A pair is a
+// mini combo that only forms when BOTH sides are in the group; each tower then gets half of the OTHER
+// side's main combo bonus (the kiwi bird gets half the Food bonus, the kiwi fruit half the Birds bonus).
+// [id word, display name, side A names, side B names]
+export const NAME_PAIRS = [
+  ["kiwi", "Kiwi", ["kiwi bird"], ["kiwi fruit", "kiwi half", "kiwi vine"]],
+  ["bat", "Bat", ["fruit bat", "cave bat"], ["baseball bat", "cricket bat"]],
+  ["crane", "Crane", ["crane bird", "origami crane"], ["crane truck"]],
+  ["seal", "Seal", ["harbor seal", "elephant seal", "harp seal"], ["seal stamp"]],
+  ["mouse", "Mouse", ["field mouse", "pet mouse"], ["computer mouse"]],
+  ["club", "Club", ["golf club", "caveman club"], ["club sandwich"]],
+  ["bass", "Bass", ["bass fish"], ["bass guitar", "bass drum", "double bass"]],
+  ["pitcher", "Pitcher", ["pitcher"], ["pitcher plant"]],
+  ["squash", "Squash", ["butternut squash"], ["squash racket"]],
+  ["pike", "Pike", ["pike fish"], ["pike"]],
+  ["cricket", "Cricket", ["cricket insect"], ["cricket bat", "cricket ball"]],
+  ["plane", "Plane", ["hand plane"], ["propeller plane"]],
+  ["fan", "Fan", ["electric fan", "ceiling fan", "folding hand fan"], ["fan palm", "sea fan coral"]],
+  ["tank", "Tank", ["army tank"], ["fish tank", "tank top"]],
+  ["kite", "Kite", ["kite"], ["kite shield"]],
+  ["bow", "Bow", ["bow and arrow", "composite bow"], ["bow tie", "hair bow ribbon"]],
+  ["star", "Star", ["star"], ["star fruit"]],
+  ["spring", "Spring", ["coil spring"], ["spring roll"]],
+  ["organ", "Organ", ["pipe organ"], ["organ pipe cactus"]],
+];
+for (const [word, name, a, b] of NAME_PAIRS) {
+  COMBOS["pair:" + word] = {
+    name, color: "#e879f9", bonus: {}, mini: true, pair: true, sides: [a, b],
+    desc: "Name pair: each side gets half of the other side's combo bonus.",
+  };
+}
+/** Name-pair ids ("pair:kiwi") a sprite name is part of. */
+export function namePairsOf(name) {
+  return NAME_PAIRS.filter(([, , a, b]) => a.includes(name) || b.includes(name)).map(([word]) => "pair:" + word);
+}
+
+const MINI_EXCLUDE = new Set(["violin bow", "crate of fish", "jar of slime", "jar of eyeballs", "ghost orchid", "ghost mushroom",
+  "oil drum", "metal oil drum"]);
+// Extra members whose names do not match the family word (bongo drums, djembe...)
+const MINI_EXTRA = {
+  "mini:drum": ["bongo drums", "tabla drums", "drum set", "djembe", "cajon", "tambourine", "gong"],
+};
 for (const [word, name, parent] of MINI_FAMILIES) {
   const p = COMBOS[parent], bonus = {};
   for (const [k, v] of Object.entries(p.bonus)) {
@@ -367,11 +420,13 @@ for (const [word, name, parent] of MINI_FAMILIES) {
                    : `Mini ${p.name} combo: ${Math.round(MINI_COMBO.share * 100)}% of the ${p.name} bonus. ${p.desc}`,
   };
 }
-/** The mini combo id ("mini:slime") a sprite name belongs to, or null. */
-export function miniFamilyOf(name) {
-  if (MINI_EXCLUDE.has(name)) return null;
-  for (const [word] of MINI_FAMILIES) if (name === word || name.endsWith(" " + word)) return "mini:" + word;
-  return null;
+/** Every mini combo id ("mini:slime") a sprite name belongs to (a ghost cat is a Ghost AND a Cat). */
+export function miniFamiliesOf(name) {
+  if (MINI_EXCLUDE.has(name)) return [];
+  const out = MINI_FAMILIES.filter(([word, , , prefix]) => name === word || name.endsWith(" " + word) || (prefix && name.startsWith(word + " ")))
+    .map(([word]) => "mini:" + word);
+  for (const [id, names] of Object.entries(MINI_EXTRA)) if (names.includes(name) && !out.includes(id)) out.push(id);
+  return out;
 }
 
 // Bigger combos. A combo of 3, 4 or 5 linked towers gives each tower in it a bigger bonus.
@@ -410,7 +465,7 @@ export const THEMES = {
   kitchen:    { name: "Kitchen",    color: "#f97316", n: { every: 4, dmg: 1.0, radius: 1.2 },  desc: "Food fight: every few attacks also lobs a pie at a random enemy in range." },
   farm:       { name: "Farm",       color: "#84cc16", n: { goldPerKill: 3 },                  desc: "Harvest: at the end of every wave, pays extra gold for every kill these towers made." },
   graveyard:  { name: "Graveyard",  color: "#7c3aed", n: { radius: 0.9, time: 5 },             desc: "Haunting: enemies they kill leave a haunted spot that curses anything walking through it." },
-  pirate:     { name: "Pirate Ship", color: "#a16207", n: { chance: 0.25, gold: 5 },           desc: "Plunder: kills sometimes drop a whole chest of gold." },
+  pirate:     { name: "Pirate",     color: "#a16207", n: { chance: 0.25, gold: 5 },           desc: "Plunder: kills sometimes drop a whole chest of gold." },
   circus:     { name: "Circus",     color: "#ec4899", n: { share: 0.7, range: 2.5 },           desc: "Juggling act: their shots bounce on to another enemy." },
   hospital:   { name: "Hospital",   color: "#ef4444", n: { hearts: 1, healPerExtra: 2 },      desc: "Triage: gives you back a heart at the end of every other wave, more with more healers in it." },
   castle:     { name: "Castle",     color: "#64748b", n: { range: 1 },                        desc: "Fortress: nothing can stun or frighten these towers, and they see further." },
@@ -422,6 +477,7 @@ export const THEMES = {
   laboratory: { name: "Laboratory", color: "#22d3ee", n: {},                                   desc: "Mutation: every hit adds a random effect: burn, poison, slow, curse or stun." },
   winter:     { name: "Winter",     color: "#bae6fd", n: { every: 8, radius: 2, time: 1.5 },   desc: "Blizzard: every so often freezes the enemies around these towers." },
   school:     { name: "School",     color: "#facc15", n: { perWave: 0.03, max: 0.6 },          desc: "Studying: these towers get a little stronger for every wave they spend together." },
+  roman:      { name: "Roman",      color: "#9f1239", n: { share: 0.15 },                     desc: "Thumbs down: enemies these towers bring below 15% health are finished off on the spot." },
   concert:    { name: "Concert",    color: "#a855f7", n: { echoes: 2, share: 0.35, gap: 0.25 }, desc: "Encore: every attack is repeated twice more, quieter." },
 };
 // Workshop tricks a tower can draw at the start of a wave.

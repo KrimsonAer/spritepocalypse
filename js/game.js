@@ -7,7 +7,7 @@
 // Numbers come from config.js. Tags are explained in GDD.md.
 // =====================================================================================
 
-import { CONFIG, ELEMENT_COLORS, COMBOS, COMBO_STRONGER, COMBO_SIZE, THEMES, WORKSHOP_TRICKS } from "./config.js";
+import { CONFIG, ELEMENT_COLORS, COMBOS, COMBO_STRONGER, COMBO_SIZE, THEMES, WORKSHOP_TRICKS, miniBonus } from "./config.js";
 import { db, loadPack, randomSubject, enemyTagsFor, categoriesFor } from "./data.js";
 import { pickDrawing } from "./search.js";
 import { sfx } from "./audio.js";
@@ -682,7 +682,7 @@ function refreshCombos() {
   // replaced the one-combo-at-a-time lock-in). Each combo's size counts its own linked group.
   const near = (a, b) => a !== b && Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1 && a.subject.name !== b.subject.name;
   const fits = (t, cat) => t.categories.includes(cat) && COMBOS[cat];
-  for (const t of state.towers) { t.combos = []; t.links = []; t.comboSizes = {}; }
+  for (const t of state.towers) { t.combos = []; t.links = []; t.comboSizes = {}; t.pairOther = {}; }
   // Build each category's groups oldest tower first. A group never holds two of the same sprite
   // (Mark, 2026-11-12): 10 lemons around an apple make a 2-tower Food combo, not an 11-tower one. A
   // duplicate left out can still start its own group with other towers that are not in one yet.
@@ -700,6 +700,16 @@ function refreshCombos() {
         }
       }
       if (group.length < 2) continue;
+      // a name pair needs both sides; each tower remembers the other side's main combo for its bonus
+      if (COMBOS[cat].pair) {
+        const sideOf = (t) => (COMBOS[cat].sides[0].includes(t.subject.name) ? 0 : 1);
+        if (new Set(group.map(sideOf)).size < 2) continue;
+        for (const t of group) {
+          const other = group.find((o) => sideOf(o) !== sideOf(t));
+          t.pairOther = t.pairOther || {};
+          t.pairOther[cat] = other.categories.find((c) => COMBOS[c] && !COMBOS[c].mini);
+        }
+      }
       for (const t of group) {
         t.combos.push(cat);
         t.comboSizes[cat] = group.length;
@@ -727,7 +737,8 @@ function refreshCombos() {
   for (const t of state.towers) {
     const c = noCombo();
     for (const cat of t.combos) {
-      const bonus = COMBOS[cat].bonus;
+      // name pairs borrow half of the other side's combo bonus
+      const bonus = COMBOS[cat].pair ? (t.pairOther && t.pairOther[cat] ? miniBonus(t.pairOther[cat]) : {}) : COMBOS[cat].bonus;
       // bigger combos: number bonuses grow, on/off-only combos give extra damage instead (COMBO_SIZE in config.js)
       const extra = Math.max(0, Math.min(t.comboSizes[cat], COMBO_SIZE.maxTowers) - 2);
       const k = 1 + extra * COMBO_SIZE.bonusPerExtra;
@@ -766,7 +777,7 @@ function refreshCombos() {
   }
   for (const { a, b, cat } of fresh) {
     if (!b) continue;
-    state.fx.push({ kind: "text", x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 0.35, text: COMBOS[cat].name.toUpperCase() + (COMBOS[cat].mini ? " MINI COMBO" : " COMBO"), color: COMBOS[cat].color, scale: 0.85, life: 1.4, max: 1.4 });
+    state.fx.push({ kind: "text", x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 0.35, text: COMBOS[cat].name.toUpperCase() + (COMBOS[cat].pair ? " PAIR" : COMBOS[cat].mini ? " MINI COMBO" : " COMBO"), color: COMBOS[cat].color, scale: 0.85, life: 1.4, max: 1.4 });
   }
   if (fresh.length) sfx.combo();
 }
@@ -1527,6 +1538,11 @@ function applyHit(tower, e, dmg, opts) {
   if (e.dead) return;
   if (s.execute && !e.egg && e.hp <= e.maxHp * X.executeShare) {      // Execute: finish off the nearly dead
     floatText(e.x, e.y - 0.5, "EXECUTE", "#dc2626", 0.9);
+    hurt(e, e.hp + e.shield + 1, tower, { silent: true, ignoreShield: true });
+    return;
+  }
+  if (hasTheme(tower, "roman") && !e.egg && e.hp <= e.maxHp * THEMES.roman.n.share) {   // Roman theme: thumbs down
+    floatText(e.x, e.y - 0.5, "THUMBS DOWN", THEMES.roman.color, 0.9);
     hurt(e, e.hp + e.shield + 1, tower, { silent: true, ignoreShield: true });
     return;
   }
