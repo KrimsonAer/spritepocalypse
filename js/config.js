@@ -478,7 +478,7 @@ export const THEMES = {
   winter:     { name: "Winter",     color: "#bae6fd", n: { every: 8, radius: 2, time: 1.5 },   desc: "Blizzard: every so often freezes the enemies around these towers." },
   school:     { name: "School",     color: "#facc15", n: { perWave: 0.03, max: 0.6 },          desc: "Studying: these towers get a little stronger for every wave they spend together." },
   roman:      { name: "Roman",      color: "#9f1239", n: { share: 0.15 },                     desc: "Thumbs down: enemies these towers bring below 15% health are finished off on the spot." },
-  concert:    { name: "Concert",    color: "#a855f7", n: { echoes: 2, share: 0.35, gap: 0.25 }, desc: "Encore: every attack is repeated twice more, quieter." },
+  concert:    { name: "Orchestra",  color: "#a855f7", n: { echoes: 2, share: 0.35, gap: 0.25 }, desc: "Encore: every attack is repeated twice more, quieter." },
 };
 // Workshop tricks a tower can draw at the start of a wave.
 export const WORKSHOP_TRICKS = ["Burst", "Echo", "Explode", "Lucky", "Shatter", "Execute", "Monstrous"];
