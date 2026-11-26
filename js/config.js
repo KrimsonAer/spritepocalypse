@@ -26,7 +26,7 @@ export const CONFIG = {
     killGoldPerWave: 0.5,    // extra gold per kill for each wave after the first
     richMultiplier: 3,       // gold multiplier for enemies tagged Rich
     goldTagKillMultiplier: 2,// gold multiplier when the killing tower has the Gold tag
-    goldSupportPerWave: 15,  // gold a "Support + Gold" tower pays at the end of every wave
+    goldSupportPerWave: 25,  // gold a "Support + Gold" tower pays at the end of every wave (was 15)
     healEveryWaves: 3,       // a "Support + Heal" tower restores 1 heart every N waves it survives
   },
 
@@ -163,12 +163,17 @@ export const CONFIG = {
     bleedTime: 3,            // Bleed: seconds
     knockback: 0.9,          // Knockback: cells pushed back along the path
     knockbackCooldown: 1.5,  // Knockback: seconds before the same enemy can be pushed again
-    // Support auras apply to the 8 blocks around the support tower.
-    buffDamage: 0.3,         // Buff: +30% damage to each neighbour (stacks)
-    hasteRate: 0.25,         // Haste: +25% attack speed to each neighbour (stacks)
-    reachBonus: 1,           // Reach: +1 cell of range to each neighbour
+    // Support auras (2026-11-14): an aura Support's range tag sets how far its aura reaches, in squares
+    // around it (1 = the 8 blocks touching it). Wider auras reach more towers, so they give less each.
+    //   buff  = extra damage per tower (stacks)     haste = extra attack speed per tower (stacks)
+    //   reach = extra range in cells per tower      slow  = Support + Slow field speed multiplier
+    // A Slow field covers enemies inside the tower's normal range circle (Short 2.4, Mid 3.4, Long 4.8).
+    supportTiers: {
+      Short: { cells: 1, buff: 0.5, haste: 0.4, reach: 1, slow: 0.6 },
+      Mid:   { cells: 2, buff: 0.3, haste: 0.25, reach: 0.75, slow: 0.7 },
+      Long:  { cells: 3, buff: 0.2, haste: 0.15, reach: 0.5, slow: 0.8 },
+    },
     reachMax: 2,             // Reach: most bonus range a tower can collect
-    supportSlow: 0.7,        // Support + Slow: speed multiplier for enemies inside its range
     projectileSpeed: 9,      // cells per second for normal shots
     pierceSpeed: 14,         // cells per second for Pierce shots
   },

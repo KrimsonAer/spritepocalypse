@@ -49,9 +49,9 @@ export const TOWER_TAG_INFO = {
   Knockback: "Shoves enemies back down the path, the way they came.",
   Shred: "Strips armour off the enemies it hits, for good.",
   Gold: "Earns extra gold. Attackers earn more from their kills, Supports pay out after every wave.",
-  Buff: "Neighbouring towers hit harder.",
-  Haste: "Neighbouring towers attack faster.",
-  Reach: "Neighbouring towers can reach further.",
+  Buff: "Towers within its reach hit harder.",
+  Haste: "Towers within its reach attack faster.",
+  Reach: "Towers within its reach can reach further.",
   Heal: "Gives a heart back every few waves.",
   Weak: "Does not hit very hard.",
   Assassin: "Goes for the enemy in range with the least health.",
@@ -91,6 +91,10 @@ export const SUPPORT_ELEMENT_INFO = {
   Water: "Neighbouring towers knock enemies a little way back down the path.",
   Nature: "Neighbouring towers root the enemies they hit for a moment.",
   Sonic: "Lends nothing extra to its neighbours.",
+  // on a Support, the range tag is how far its aura reaches (CONFIG.tower.supportTiers)
+  Short: "Aura reaches the 8 blocks touching it. Biggest boost.",
+  Mid: "Aura reaches 2 squares around it. Medium boost.",
+  Long: "Aura reaches 3 squares around it. Smallest boost.",
 };
 
 export const ENEMY_TAG_INFO = {

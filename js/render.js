@@ -166,7 +166,7 @@ export function draw() {
   }
 
   // range ring for the selected tower, or for the armed sprite over a hovered block
-  if (view.selected) rangeRing(g, view.selected.x, view.selected.y, towerRange(view.selected), view.selected.stats.color, view.selected.stats.shape);
+  if (view.selected) rangeRing(g, view.selected.x, view.selected.y, towerRange(view.selected), view.selected.stats.color, view.selected.stats.shape, view.selected);
   if (view.armed && view.hover && state.blocks[cellIndex(view.hover.x, view.hover.y)] && !state.towerAt.has(cellIndex(view.hover.x, view.hover.y))) {
     const stats = towerStats(view.armed.tags);
     rangeRing(g, view.hover.x, view.hover.y, stats.range, stats.color, stats.shape);
@@ -401,8 +401,17 @@ function drawThemeBorders(g) {
   }
 }
 
-function rangeRing(g, x, y, range, color, shape) {
+function rangeRing(g, x, y, range, color, shape, tower) {
   if (shape === "Spin") return;
+  // an aura Support shows the square of blocks its aura reaches (a Slow field keeps its circle)
+  if (shape === "Support" && tower && !tower.stats.slow && tower.stats.tier) {
+    const n = tower.stats.tier.cells, c = view.cell, sx = centre(x) - (n + 0.5) * c, sy = centre(y) - (n + 0.5) * c, w = (2 * n + 1) * c;
+    g.strokeStyle = color; g.fillStyle = color;
+    g.globalAlpha = 0.1; g.fillRect(sx, sy, w, w);
+    g.globalAlpha = 0.7; g.lineWidth = 2; g.setLineDash([6, 5]); g.strokeRect(sx, sy, w, w);
+    g.setLineDash([]); g.globalAlpha = 1;
+    return;
+  }
   const cx = centre(x), cy = centre(y);
   const inner = shape === "Artillery" ? CONFIG.tower.shapes.Artillery.minRange * view.cell : 0;
   g.strokeStyle = color; g.fillStyle = color;

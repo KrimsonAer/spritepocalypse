@@ -466,6 +466,7 @@ export function towerStats(tags) {
   const sonic = elems.includes("Sonic");
   return {
     shape, elems, rangeTag, range: rg.cells, dmg, cd,
+    tier: shape === "Support" ? T.supportTiers[rangeTag] || T.supportTiers.Short : null,   // aura reach + strength
     // Versatile hits ground and air; Anti-Air hits ONLY air, harder; Sonic hits everything
     antiAir: has("Versatile") || has("Anti-Air") || sonic,
     airOnly: has("Anti-Air") && !sonic,
@@ -484,7 +485,7 @@ export function towerStats(tags) {
   };
 }
 
-/** Support towers boost the 8 blocks around them. Recomputed whenever towers change. */
+/** Support towers boost the towers within their reach (1, 2 or 3 squares). Recomputed whenever towers change. */
 export function refreshAuras() {
   refreshCopycats();
   refreshCombos();
@@ -494,10 +495,11 @@ export function refreshAuras() {
     if (s.stats.shape !== "Support") continue;
     for (const t of state.towers) {
       if (t === s || t.stats.shape === "Support") continue;
-      if (Math.abs(t.x - s.x) > 1 || Math.abs(t.y - s.y) > 1) continue;
-      if (s.stats.buff) t.aura.dmg += T.buffDamage;
-      if (s.stats.haste) t.aura.rate += T.hasteRate;
-      if (s.stats.reach) t.aura.range = Math.min(T.reachMax, t.aura.range + T.reachBonus);
+      const tier = s.stats.tier;
+      if (Math.abs(t.x - s.x) > tier.cells || Math.abs(t.y - s.y) > tier.cells) continue;
+      if (s.stats.buff) t.aura.dmg += tier.buff;
+      if (s.stats.haste) t.aura.rate += tier.haste;
+      if (s.stats.reach) t.aura.range = Math.min(T.reachMax, t.aura.range + tier.reach);
       for (const el of s.stats.elems) if (!t.aura.imbue.includes(el) && !t.stats.elems.includes(el)) t.aura.imbue.push(el);
     }
   }
@@ -1218,7 +1220,7 @@ function updateTower(tower, dt) {
 
   if (s.shape === "Support") {
     // Support + Slow is a slowing field. Everything else a Support does is an aura or end-of-wave effect.
-    if (s.slow) for (const e of enemiesInRange(tower, towerRange(tower))) slowEnemy(e, T.supportSlow, 0.25);
+    if (s.slow) for (const e of enemiesInRange(tower, towerRange(tower))) slowEnemy(e, s.tier.slow, 0.25);
     return;
   }
 
