@@ -328,6 +328,11 @@ export const COMBOS = {
   vehicles:  { name: "Vehicles",  color: "#ef4444", bonus: { knockback: true },    desc: "Ramming: their hits knock enemies back down the path.", strong: "Ramming: they knock enemies much further back." },
   weather:   { name: "Weather",   color: "#06b6d4", bonus: { status: 1.5 },        desc: "Storm front: their slows, burns, poisons and stuns last longer." },
   household: { name: "Household", color: "#a3a3a3", bonus: { dmg: 0.15 },         desc: "Handy: these towers hit a little harder." },
+  // split out of Household (2026-11-26)
+  tools:     { name: "Tools",     color: "#d97706", bonus: { stunChance: 0.12 },    desc: "Hammered: their hits sometimes stun.", strong: "Hammered: their hits stun much more often." },
+  kitchen:   { name: "Kitchen",   color: "#e11d48", bonus: { status: 1.5 },         desc: "Slow cooked: their slows, burns, poisons and stuns last longer." },
+  furniture: { name: "Furniture", color: "#7c2d12", bonus: { range: 1 },            desc: "Standing on chairs: these towers reach further." },
+  storage:   { name: "Storage",   color: "#e0b07a", bonus: { gold: 1.5 },           desc: "Stockpile: their kills earn more gold." },
   // added 2026-11-12
   cosmos:    { name: "Cosmos",    color: "#4338ca", bonus: { pull: 0.4 },           desc: "Gravity: their hits pull enemies towards them.", strong: "Gravity: their hits pull enemies much harder." },
   rocks:     { name: "Rocks",     color: "#78716c", bonus: { stunChance: 0.12 },    desc: "Rock solid: their hits sometimes stun.", strong: "Rock solid: their hits stun much more often." },
